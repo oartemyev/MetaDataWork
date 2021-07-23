@@ -27,7 +27,7 @@ import (
 
 	//	"golang.org/x/tools/go/analysis/passes/nilness"
 	//"honnef.co/go/tools/analysis/facts/nilness"
-	_ "github.com/denisenkom/go-mssqldb"
+	mssql "github.com/denisenkom/go-mssqldb"
 	"github.com/oartemyev/ParseDBA"
 )
 
@@ -71,24 +71,25 @@ type DirectoryEntry struct {
 	stream_size                                 int64
 }
 
-var minor_version, major_version int16
-var bom, sector_shift_exp, mini_sector_shift_exp int16
+//var minor_version, major_version int16
+//var bom, sector_shift_exp, mini_sector_shift_exp int16
 var sector_size, mini_sector_size int16
 var binary_data []byte
 
-var number_of_directory_sectors, number_of_FAT_sectors, first_directory_sector_location,
-	transaction_signature_number, mini_stream_cutoff_size, first_Mini_FAT_sector_location,
-	number_of_Mini_FAT_sectors, first_DIFAT_sector_location, number_of_DIFAT_sectors,
-	max_sector_index int32
+// var number_of_directory_sectors, number_of_FAT_sectors, first_directory_sector_location,
+// 	transaction_signature_number, mini_stream_cutoff_size, first_Mini_FAT_sector_location,
+// 	number_of_Mini_FAT_sectors, first_DIFAT_sector_location, number_of_DIFAT_sectors
 
 var DIFAT_sectors []int32
 var DIFAT []int32
 var FAT []int32
 var FAT_sectors []int32
-var miniFAT []int32
 
-var directory_entries []DirectoryEntry
-var directory_entries_id_by_name map[string]int
+//var miniFAT []int32
+var max_sector_index int32
+
+//var directory_entries []DirectoryEntry
+//var directory_entries_id_by_name map[string]int
 
 var ObjectsByDescr map[string]interface{}
 var ObjectsByID map[string]interface{}
@@ -140,9 +141,9 @@ func DirectoryEntryTypes(i int) string {
 	return "ERROR ENTRY TYPE " + IntToString(i)
 }
 
-func is_valid(sec_num int32) bool {
-	return uint32(sec_num) < MAX_SEC_NUM
-}
+// func is_valid(sec_num int32) bool {
+// 	return uint32(sec_num) < MAX_SEC_NUM
+// }
 func DecodeUTF16(b []byte) string {
 	utf := make([]uint16, (len(b)+(2-1))/2)
 	o := binary.BigEndian //binary.LittleEndian
@@ -3653,3 +3654,221 @@ func (t *MetaDataWork) ParseMD() {
 }
 
 //=======================  КОНЕЦ MetaDataWork  ===========================================
+
+type ODBCRecordset struct {
+	MetaDataWork
+	db   *sql.DB
+	err  error
+	rows *sql.Rows
+	conn *sql.Conn
+
+	ctx context.Context
+
+	cols []string
+	vals []interface{}
+}
+
+func NewODBCRecordset() ODBCRecordset {
+	var r ODBCRecordset = *new(ODBCRecordset)
+	r.MetaDataWork = NewMetaDataWork()
+	r.db = nil
+	r.rows = nil
+
+	return r
+}
+
+func (t *ODBCRecordset) Connection(connString string) error {
+
+	t.db, t.err = sql.Open("sqlserver", connString)
+	if t.err != nil {
+		//log.Fatal("Error creating connection pool: ", err.Error())
+		return t.err
+	}
+
+	return nil
+}
+
+func (t *ODBCRecordset) AttachMD(fileName string) error {
+	t.MetaDataWork.AttachMD(fileName)
+
+	connString := t.MetaDataWork.GetConnectString()
+	connector, err := mssql.NewConnector(connString)
+	if err != nil {
+		return err
+	}
+	t.db = sql.OpenDB(connector)
+
+	connector.SessionInitSQL = "SET ANSI_NULLS ON"
+	t.ctx = context.Background()
+	err = t.db.PingContext(t.ctx)
+	if err != nil {
+		return err
+	}
+
+	t.conn, err = t.db.Conn(t.ctx)
+	if err != nil {
+		return err
+	}
+
+	// t.db = sql.OpenDB(connector)
+	// if t.err != nil {
+	// 	//log.Fatal("Error creating connection pool: ", err.Error())
+	// 	return t.err
+	// }
+
+	return nil
+}
+
+func (t *ODBCRecordset) Close() error {
+	if t.rows != nil {
+		t.err = t.rows.Close()
+		t.rows = nil
+	}
+	if t.err != nil {
+		return t.err
+	}
+	if t.conn != nil {
+		t.conn.Close()
+		t.conn = nil
+	}
+	if t.db != nil {
+		t.err = t.db.Close()
+		t.db = nil
+	}
+
+	return t.err
+}
+
+func (t *ODBCRecordset) Execucte(q string) error {
+
+	q = t.MetaDataWork.ParseQuery(q)
+	_, t.err = t.conn.ExecContext(t.ctx, q)
+
+	return t.err
+}
+
+func (t *ODBCRecordset) Exec(q string) error {
+	t.err = nil
+	if t.rows != nil {
+		t.err = t.rows.Close()
+		t.rows = nil
+	}
+	if t.err != nil {
+		return t.err
+	}
+
+	//ctx := context.Background()
+	t.err = t.db.PingContext(t.ctx)
+	if t.err != nil {
+		return t.err
+	}
+
+	q = t.MetaDataWork.ParseQuery(q)
+	t.rows, t.err = t.db.QueryContext(t.ctx, q)
+	if t.err != nil {
+
+		fmt.Println(q)
+
+		return t.err
+	}
+
+	t.cols, t.err = t.rows.Columns()
+	if t.err != nil {
+		return t.err
+	}
+
+	if t.cols == nil {
+		return nil
+	}
+	t.vals = make([]interface{}, len(t.cols))
+	for i := 0; i < len(t.cols); i++ {
+		t.vals[i] = new(interface{})
+	}
+
+	return t.err
+}
+
+func (t ODBCRecordset) GetCols() []string {
+	return t.cols
+}
+
+func (t *ODBCRecordset) Next() (bool, error) {
+	r := t.rows.Next()
+	if r {
+		t.err = t.rows.Scan(t.vals...)
+	}
+	if t.rows.Err() != nil {
+		return r, t.rows.Err()
+	}
+
+	return r, t.err
+}
+
+func (t ODBCRecordset) GetValueByName(name string) (interface{}, error) {
+	var v interface{}
+	var err error
+	var i int
+
+	err = nil
+	for i = 0; i < len(t.cols); i++ {
+		//t.vals[i] = new(interface{})
+		if strings.ToUpper(t.cols[i]) == strings.ToUpper(name) {
+			//v = t.vals[i]
+			_pval := t.vals[i]
+			pval := _pval.(*interface{})
+			return (*pval), nil
+			//	break
+		}
+	}
+	if i >= len(t.cols) {
+		err = fmt.Errorf("Поле %s не найдено", name)
+	}
+
+	return v.(*interface{}), err
+
+}
+
+func (t ODBCRecordset) GetStringByName(name string) (string, error) {
+	var _pval interface{}
+	var err error
+	var i int
+
+	s := ""
+
+	err = nil
+	for i = 0; i < len(t.cols); i++ {
+		//t.vals[i] = new(interface{})
+		if strings.ToUpper(t.cols[i]) == strings.ToUpper(name) {
+			_pval = t.vals[i]
+			pval := _pval.(*interface{})
+			switch v := (*pval).(type) {
+			case nil:
+				s = "NULL"
+			case bool:
+				if v {
+					s = "1"
+				} else {
+					s = "0"
+				}
+			case []byte:
+				s = fmt.Sprint(string(v))
+			case int, int8, int16, int32, int64:
+				s = fmt.Sprintf("%d", v)
+			case float32, float64:
+				s = fmt.Sprintf("%f", v)
+			case time.Time:
+				s = fmt.Sprint(v.Format("2006-01-02 15:04:05.999"))
+			default:
+				s = fmt.Sprint(v)
+			}
+
+			break
+		}
+	}
+	if i >= len(t.cols) {
+		err = fmt.Errorf("Поле %s не найдено", name)
+	}
+
+	return s, err
+
+}
