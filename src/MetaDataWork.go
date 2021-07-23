@@ -2,37 +2,33 @@ package MetaDataWork
 
 import (
 	//	"encoding"
-	"fmt"
-	"regexp"
-	"strings"
-	"time"
-
-	"path/filepath"
-
 	"bytes"
 	"encoding/binary"
+	"fmt"
 	"io/ioutil"
 	"math"
 	"os"
+	"path/filepath"
+	"regexp"
+	"strconv"
+	"strings"
+	"time"
 	"unicode/utf16"
 	"unicode/utf8"
 
-	"strconv"
 	//	"time"
-
 	"encoding/json"
+	//"projects/ParseDBA"
+	"context"
+	"database/sql"
 
 	"github.com/softlandia/cpd"
 	"golang.org/x/text/encoding/charmap"
 
 	//	"golang.org/x/tools/go/analysis/passes/nilness"
 	//"honnef.co/go/tools/analysis/facts/nilness"
-	"projects/ParseDBA"
-
-	"context"
-	"database/sql"
-
 	_ "github.com/denisenkom/go-mssqldb"
+	"github.com/oartemyev/ParseDBA"
 )
 
 //=======================  НАЧАЛО КЛАССА Storage ===========================================
