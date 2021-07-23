@@ -3872,3 +3872,4 @@ func (t ODBCRecordset) GetStringByName(name string) (string, error) {
 	return s, err
 
 }
+
