@@ -1,4 +1,4 @@
-module projects/MetaDataWork
+module github.com/oartemyev/MetaDataWork
 
 go 1.16
 
