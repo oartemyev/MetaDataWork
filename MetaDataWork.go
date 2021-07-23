@@ -1773,7 +1773,7 @@ func GetCMMS(filename string) CMMS {
 			//fmt.Print("!")
 			stream := metadata.OpenStream("Main MetaData Stream")
 			lSize := stream.GetSize()
-			fmt.Printf("lSize=%d\n", lSize)
+			//fmt.Printf("lSize=%d\n", lSize)
 
 			btStream := make([]byte, lSize)
 			btStream = stream.Read(btStream, lSize)
@@ -1785,7 +1785,7 @@ func GetCMMS(filename string) CMMS {
 			if (i > 0) && (i < len(btStream)) {
 				btStream = btStream[i:]
 			}
-			fmt.Printf("sz=%d\n", len(btStream))
+			//fmt.Printf("sz=%d\n", len(btStream))
 
 			decoder := charmap.Windows1251.NewDecoder()
 			buf := bytes.NewBuffer([]byte{})
@@ -1797,7 +1797,7 @@ func GetCMMS(filename string) CMMS {
 				panic(err)
 			}
 			sss := string(b)
-			fmt.Printf("sz=%d\n", len(sss))
+			//fmt.Printf("sz=%d\n", len(sss))
 
 			file, _err := os.Create(filename + ".MDP")
 			if _err != nil {
@@ -3353,8 +3353,8 @@ func (t *MetaDataWork) AttachMD(fileName string) {
 	if !bExist {
 
 		statFileMD, _ := GetFileStat(t.fileMetadata)
-		fmt.Print("\n")
-		fmt.Print(statFileMD)
+		//fmt.Print("\n")
+		//fmt.Print(statFileMD)
 
 		t.c = GetCMMS(fileName)
 
