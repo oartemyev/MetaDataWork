@@ -3767,7 +3767,7 @@ func (t *ODBCRecordset) Exec(q string) error {
 	t.rows, t.err = t.db.QueryContext(t.ctx, q)
 	if t.err != nil {
 
-		fmt.Println(q)
+		 fmt.Println(q)
 
 		return t.err
 	}
