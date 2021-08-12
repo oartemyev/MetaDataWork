@@ -2265,6 +2265,7 @@ func (t MetaDataWork) PrepareBoundaryPeriod(v string) PeriodBoundaries { //По�
 				r.border = t.GetStringFromDate(r.data)
 				r.Time = "     0     0   "
 				r.position = ""
+				r.value = obj
 
 				//fmt.Printf("obj=%s r.data=%s", t.GetStringFromDate(obj), t.GetStringFromDate(r.data))
 
@@ -3127,6 +3128,303 @@ func (t MetaDataWork) ParsingVTRegisterBalances(v string) string {
 	return v
 }
 
+//ПодготовитьУсловиеПоСрезПервыхПоследних
+func (t MetaDataWork) PrepareConditionBySliceFirstLast(strCondotion string, NameTable string) string {
+	txtQuery := strCondotion
+	Pattern := `'[^']*'|\$?[\wа-я]+\.[\wа-я]+|[:@\$]?[\wа-я]+|[^:@\$\wа-я']+`
+	re := t.GetParametersExpressions(Pattern, strCondotion)
+	res := re.FindAllStringSubmatch(txtQuery, -1)
+	for i := range res {
+		keyWord := strings.Trim(res[i][0], " ")
+		txtReplace := ""
+		if strings.ToUpper(keyWord) == "ТЕКУЩИЙЭЛЕМЕНТ" {
+			txtReplace = NameTable + ".objid"
+		}
+		txtReplace = strings.Replace(txtReplace, keyWord, txtReplace, -1)
+		txtQuery = strings.Replace(txtQuery, keyWord, txtReplace, -1)
+	}
+	return txtQuery
+}
+
+func CreateFunctionStrToId(db *sql.DB) {
+	var rows *sql.Rows
+	ctx := context.Background()
+	err := db.PingContext(ctx)
+	if err != nil {
+		fmt.Printf("Error CreateFunctionStrToId %s", err.Error())
+		return
+	}
+	rows, err = db.QueryContext(ctx, "select name from dbo.sysobjects (nolock) where id = object_id(N'[dbo].[StrToId]')")
+	if err != nil {
+		fmt.Printf("Error CreateFunctionStrToId %s", err.Error())
+		return
+	}
+	if rows.Next() {
+		return
+	}
+
+	_, err = db.ExecContext(ctx, "create function StrToID(@Res36 char(9))\n"+
+		"	returns int as \n"+
+		"	begin\n"+
+		"		declare @j int\n"+
+		"		declare @Deci int\n"+
+		"		DECLARE @Arr36 char(36)\n"+
+		"		select @Arr36 = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ'\n"+
+		"		select @Deci = 0\n"+
+		"		select @j = 1\n"+
+		"		while @j <= len(ltrim(rtrim(@Res36)))\n"+
+		"		begin\n"+
+		"		if @j <> 1\n"+
+		"			select @Deci = @Deci*36\n"+
+		"			select @Deci = @Deci + charindex(substring(ltrim(rtrim(@Res36)), @j,1),@Arr36) -1\n"+
+		"			select @j = @j+1\n"+
+		"		end\n"+
+		"		return(@Deci)\n"+
+		"	end\n")
+	if err != nil {
+		fmt.Printf("Error CreateFunctionStrToId %s", err.Error())
+	}
+
+}
+
+//СрезПоследних_DBF_SQL
+func (t MetaDataWork) SliceLast_DBF_SQL(res []string) string {
+	txtQuery := ""
+
+	var ExpandPeriods int
+	var err error
+
+	SpravID := res[1]
+	BeginPeriod := res[2]
+	ConditionRequisites := res[3]
+	AdditionalConditions := res[4]
+	Join := res[5]
+	_ExpandPeriods := res[6]
+	if strings.Trim(_ExpandPeriods, " ") == "," {
+		ExpandPeriods = 0
+	} else {
+		ExpandPeriods, err = strconv.Atoi(strings.Trim(_ExpandPeriods, " "))
+		if err != nil {
+			ExpandPeriods = 0
+		}
+	}
+	//regRec := t.GetRegistrByName(RegistID)
+	spravRec := t.GetSpravByName(SpravID)
+	//strConditionByAttributes := ""
+	strConditionColumn := ""
+	strConditionColumnsData := ""
+	strConditionColumnsDoc := ""
+	strConditionData := ""
+	strGroupColumns := ""
+	strAddCondition := ""
+	strJoin := ""
+	KeyWord := "where "
+	NameTableSprav := "SC" + IntToString(spravRec.ID)
+	//{ подготовка 1-го параметра КОНЕЦПЕРИОДА
+	if strings.Trim(BeginPeriod, " ") != "," {
+		tt := t.PrepareBoundaryPeriod(BeginPeriod)
+		if tt.active == 0 {
+			return ""
+		}
+		//DataEndCalc := tt.data
+		BorderEndCalc := tt.border
+		//TimeEndCalc := tt.Time
+		//ValueBorderCalc := tt.value
+
+		strConditionData = KeyWord + `tconst_1.date <= '` + BorderEndCalc + `'`
+		KeyWord = "and "
+	}
+	//}
+
+	//{ подготовка 2-го параметра РЕКВИЗИТЫ
+	NameTempTable := "slicelast_" + NameTableSprav
+
+	var listReqv []string = make([]string, 0)
+
+	ModeEditData := 0
+	ModeEditDocum := 0
+
+	ConditionRequisites = strings.Replace(ConditionRequisites, "(", "", -1)
+	ConditionRequisites = strings.Replace(ConditionRequisites, ")", "", -1)
+	if strings.Trim(ConditionRequisites, " ") != "," {
+		listReqv = strings.Split(ConditionRequisites, ",")
+	}
+	for _, nameReqv := range listReqv {
+		metaRekv := spravRec.GetRekvByName(nameReqv)
+		if metaRekv.Period == 0 {
+			continue
+		}
+		reqvID := "sp" + IntToString(metaRekv.ID)
+		if metaRekv.ChangeDoc == 1 {
+			ModeEditDocum = ModeEditDocum + 1
+			if ModeEditDocum == 1 {
+				strConditionColumnsDoc = strConditionColumnsDoc + reqvID
+			} else {
+				strConditionColumnsDoc = strConditionColumnsDoc + "," + reqvID
+			}
+		} else {
+			ModeEditData = ModeEditData + 1
+			if ModeEditData == 1 {
+				strConditionColumnsData = strConditionColumnsData + reqvID
+			} else {
+				strConditionColumnsData = strConditionColumnsData + "," + reqvID
+			}
+			txtValue := t.PrepareValue(metaRekv._MDRec, "slicelast")
+			strConditionColumn = strConditionColumn + ",case when slicelast.id = " + reqvID + " then " + txtValue + " end " + nameReqv + "\n	"
+			strGroupColumns = strGroupColumns + ",max(vt_slicelast." + nameReqv + ") as " + nameReqv + "\n	"
+		}
+	}
+	if ModeEditData > 1 {
+		strConditionColumnsData = KeyWord + "tconst_1.id in (" + strConditionColumnsData + ")"
+	} else {
+		strConditionColumnsData = KeyWord + "tconst_1.id = " + strConditionColumnsData
+	}
+	if ModeEditDocum > 1 {
+		strConditionColumnsDoc = KeyWord + "tconst_1.id in (" + strConditionColumnsDoc + ")"
+	} else {
+		strConditionColumnsDoc = KeyWord + "tconst_1.id = " + strConditionColumnsDoc
+	}
+	KeyWord = " and "
+	//}
+
+	//{ подготовка 3-го параметра ДОПОЛНИТЕЛЬНЫЕ УСЛОВИЯ
+	if strings.Trim(AdditionalConditions, " ") != "," {
+		strAddCondition = " and "
+	}
+	strAddCondition = strAddCondition + t.PrepareConditionBySliceFirstLast(AdditionalConditions, "tconst_1")
+	//}
+
+	//{ подготовка 4-го параметра СОЕДИНЕНИЕ
+	strJoin = strAddCondition + t.PrepareConditionBySliceFirstLast(Join, "tconst_1")
+	//}
+
+	txtQuery = txtQuery + "SELECT \n" +
+		"		vt_slicelast.ТекущийЭлемент\n	"
+	if ExpandPeriods == 1 {
+		txtQuery = txtQuery + ",vt_slicelast.Дата,vt_slicelast.Время,vt_slicelast.Документ\n	"
+	}
+	txtQuery = txtQuery + "	from (\n" +
+		"		select\n" +
+		"			slicelast.objid ТекущийЭлемент\n"
+	if ExpandPeriods == 1 {
+		txtQuery = txtQuery + ",slicelast.date Дата,slicelast.time Время,slicelast.docid Документ\n	"
+	}
+	txtQuery = txtQuery + "			" + strConditionColumn + "\n " +
+		"		from ("
+	if ModeEditData > 0 {
+		txtQuery = txtQuery + "\n" +
+			"			select tconst_2.objid, tconst_2.id, tconst_2.date, 0 time, '     0   ' docid, tconst_2.value\n" +
+			"			from (\n" +
+			"				select tconst_1.objid, tconst_1.id, max(tconst_1.date) date\n" +
+			"				from _1SCONST tconst_1 (NOLOCK)\n" +
+			"				" + strJoin + "\n" +
+			"				" + strConditionData + "\n" +
+			"				" + strConditionColumnsData + "\n" +
+			"				" + strAddCondition + "\n" +
+			"				group by tconst_1.id,  tconst_1.objid) slicelast1\n" +
+			"			inner join _1SCONST tconst_2 (NOLOCK)\n" +
+			"			on slicelast1.id = tconst_2.id\n" +
+			"			and slicelast1.objid = tconst_2.objid\n" +
+			"			and slicelast1.date = tconst_2.date\n"
+	}
+
+	if ModeEditDocum > 0 {
+		var db *sql.DB
+		strConnection := t.GetConnectString()
+		db, err = sql.Open("sqlserver", strConnection)
+		if err != nil {
+			fmt.Printf("Error SliceLast_DBF_SQL %s", err.Error())
+			return txtQuery
+		}
+		defer db.Close()
+		CreateFunctionStrToId(db)
+		txtQuery_TempTable := "create table #tconst_(objid char(9), id int, date datetime, time int, iddoc char(9))"
+		txtQuery_Fill := `insert into #tconst_\n
+		select
+			 tconst.objid
+			,tconst.id
+			,substring(tconst.date_time_iddoc, 1, 8) as date
+			,dbo.StrToID(substring(tconst.date_time_iddoc, 9, 6)) as time
+			,substring(tconst.date_time_iddoc, 15, 9) as iddoc
+		from (
+			select 
+				 tconst_1.objid
+				,tconst_1.id
+				,max(const_j.date_time_iddoc) date_time_iddoc
+			from _1SCONST tconst_1 (NOLOCK)
+			inner join _1SJOURN const_j (NOLOCK)
+					on tconst_1.docid = const_j.iddoc
+					` + strJoin + `
+					` + strConditionData + `
+					` + strConditionColumnsDoc + `
+					` + strAddCondition + `
+			group by tconst_1.id, tconst_1.objid) tconst`
+		ctx := context.Background()
+		err := db.PingContext(ctx)
+		if err != nil {
+			fmt.Printf("Error CreateFunctionStrToId %s", err.Error())
+			return txtQuery
+		}
+		db.ExecContext(ctx, "set nocount on")
+		db.ExecContext(ctx, "if object_id('tempdb..#tconst_') is not null	DROP TABLE #tconst_")
+		db.ExecContext(ctx, txtQuery_TempTable)
+		db.ExecContext(ctx, txtQuery_Fill)
+		db.ExecContext(ctx, "set nocount off")
+
+		NestedTable := "#tconst_"
+		JoinData := "slicelast1.date = tconst_2.date"
+		JoinTime := "slicelast1.time = tconst_2.time"
+		JoinDocum := "slicelast1.iddoc = tconst_2.docid"
+
+		if ModeEditData > 0 {
+			txtQuery = txtQuery + `union all 
+			`
+		}
+		txtQuery = txtQuery + `
+					select tconst_2.objid, tconst_2.id, tconst_2.date, tconst_2.time, tconst_2.docid, tconst_2.value
+					FROM ` + NestedTable + ` slicelast1
+					inner join _1SCONST tconst_2 (NOLOCK)
+					on slicelast1.id = tconst_2.id
+					and slicelast1.objid = tconst_2.objid
+					and ` + JoinData + `
+					and ` + JoinTime + `
+					and ` + JoinDocum
+	}
+	txtQuery = txtQuery + `		) slicelast
+	) vt_slicelast
+	group by vt_slicelast.ТекущийЭлемент
+	`
+	if ExpandPeriods == 1 {
+		txtQuery = txtQuery + `,vt_slicelast.Дата,vt_slicelast.Время,vt_slicelast.Документ
+		`
+	}
+	txtQuery = strings.Replace(txtQuery, "slicelast", NameTempTable, -1)
+
+	txtQuery = "( " + txtQuery + " ) "
+
+	return txtQuery
+}
+
+//ПарсингВТСрезПоследних
+func (t MetaDataWork) ParsingVTSliceLatest(v string) string {
+	Param := t.GetStringParam(5)
+	Pattern := `\$СрезПоследних\.([\wа-яё]+[^\wа-яё\(]*)\(` + Param
+	re := t.GetParametersExpressions(Pattern, v)
+	if re == nil {
+		return v
+	}
+	res := re.FindAllStringSubmatch(v, -1)
+	for i := range res {
+		strChange := t.SliceLast_DBF_SQL(res[i])
+		if strChange != "" {
+			v = strings.Replace(v, res[i][0], strChange, -1)
+		}
+	}
+
+	return v
+
+}
+
 func (t MetaDataWork) ParseQuery(v string) string {
 	t.CalculateBoundariesTA()
 	v = t.ParseLastValue(v)
@@ -3352,7 +3650,7 @@ func (t *MetaDataWork) AttachMD(fileName string) {
 	bExist, err = exists(FileMDP)
 	if !bExist {
 
-		statFileMD, _ := GetFileStat(t.fileMetadata)
+		//statFileMD, _ := GetFileStat(t.fileMetadata)
 		//fmt.Print("\n")
 		//fmt.Print(statFileMD)
 
@@ -3767,7 +4065,7 @@ func (t *ODBCRecordset) Exec(q string) error {
 	t.rows, t.err = t.db.QueryContext(t.ctx, q)
 	if t.err != nil {
 
-		 fmt.Println(q)
+		fmt.Println(q)
 
 		return t.err
 	}
@@ -3872,4 +4170,3 @@ func (t ODBCRecordset) GetStringByName(name string) (string, error) {
 	return s, err
 
 }
-
