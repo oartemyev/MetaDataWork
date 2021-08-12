@@ -3434,6 +3434,8 @@ func (t MetaDataWork) ParseQuery(v string) string {
 	v = t.ParsingTableAttributes(v)
 	v = t.ParsingVTRegisterBalances(v)
 
+	v = t.ParsingVTSliceLatest(v)
+
 	v = t.ParseParameters(v)
 
 	return v
