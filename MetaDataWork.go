@@ -1860,6 +1860,8 @@ type MetaDataWork struct {
 
 	QuartMonth []int
 
+	SubQuery []string // Сгенерированные подзапросы, которые нужно добавить перед Query
+
 	Param map[string]interface{}
 
 	TableOfType map[string]TableType //[]TableType
@@ -3339,39 +3341,73 @@ func (t MetaDataWork) SliceLast_DBF_SQL(res []string) string {
 		}
 		defer db.Close()
 		CreateFunctionStrToId(db)
-		txtQuery_TempTable := "create table #tconst_(objid char(9), id int, date datetime, time int, iddoc char(9))"
-		txtQuery_Fill := `insert into #tconst_\n
-		select
-			 tconst.objid
-			,tconst.id
-			,substring(tconst.date_time_iddoc, 1, 8) as date
-			,dbo.StrToID(substring(tconst.date_time_iddoc, 9, 6)) as time
-			,substring(tconst.date_time_iddoc, 15, 9) as iddoc
-		from (
-			select 
-				 tconst_1.objid
-				,tconst_1.id
-				,max(const_j.date_time_iddoc) date_time_iddoc
-			from _1SCONST tconst_1 (NOLOCK)
-			inner join _1SJOURN const_j (NOLOCK)
-					on tconst_1.docid = const_j.iddoc
-					` + strJoin + `
-					` + strConditionData + `
-					` + strConditionColumnsDoc + `
-					` + strAddCondition + `
-			group by tconst_1.id, tconst_1.objid) tconst`
-		ctx := context.Background()
-		err := db.PingContext(ctx)
-		if err != nil {
-			fmt.Printf("Error CreateFunctionStrToId %s", err.Error())
-			return txtQuery
-		}
-		db.ExecContext(ctx, "set nocount on")
-		db.ExecContext(ctx, "if object_id('tempdb..#tconst_') is not null	DROP TABLE #tconst_")
-		db.ExecContext(ctx, txtQuery_TempTable)
-		db.ExecContext(ctx, txtQuery_Fill)
-		db.ExecContext(ctx, "set nocount off")
 
+		tmpQuery := `
+		 set nocount on
+		 if object_id('tempdb..#tconst_') is not null	
+		 	DROP TABLE #tconst_
+		 create table #tconst_(objid char(9), id int, date datetime, time int, iddoc char(9))
+
+		 insert into #tconst_\n
+		 select
+		 tconst.objid
+		,tconst.id
+		,substring(tconst.date_time_iddoc, 1, 8) as date
+		,dbo.StrToID(substring(tconst.date_time_iddoc, 9, 6)) as time
+		,substring(tconst.date_time_iddoc, 15, 9) as iddoc
+	from (
+		select 
+			 tconst_1.objid
+			,tconst_1.id
+			,max(const_j.date_time_iddoc) date_time_iddoc
+		from _1SCONST tconst_1 (NOLOCK)
+		inner join _1SJOURN const_j (NOLOCK)
+				on tconst_1.docid = const_j.iddoc
+				` + strJoin + `
+				` + strConditionData + `
+				` + strConditionColumnsDoc + `
+				` + strAddCondition + `
+		group by tconst_1.id, tconst_1.objid) tconst
+		
+		set nocount off
+		`
+
+		/*
+			txtQuery_TempTable := "create table #tconst_(objid char(9), id int, date datetime, time int, iddoc char(9))"
+			txtQuery_Fill := `insert into #tconst_\n
+			select
+				 tconst.objid
+				,tconst.id
+				,substring(tconst.date_time_iddoc, 1, 8) as date
+				,dbo.StrToID(substring(tconst.date_time_iddoc, 9, 6)) as time
+				,substring(tconst.date_time_iddoc, 15, 9) as iddoc
+			from (
+				select
+					 tconst_1.objid
+					,tconst_1.id
+					,max(const_j.date_time_iddoc) date_time_iddoc
+				from _1SCONST tconst_1 (NOLOCK)
+				inner join _1SJOURN const_j (NOLOCK)
+						on tconst_1.docid = const_j.iddoc
+						` + strJoin + `
+						` + strConditionData + `
+						` + strConditionColumnsDoc + `
+						` + strAddCondition + `
+				group by tconst_1.id, tconst_1.objid) tconst`
+			ctx := context.Background()
+			err := db.PingContext(ctx)
+			if err != nil {
+				fmt.Printf("Error CreateFunctionStrToId %s", err.Error())
+				return txtQuery
+			}
+			db.ExecContext(ctx, "set nocount on")
+			db.ExecContext(ctx, "if object_id('tempdb..#tconst_') is not null	DROP TABLE #tconst_")
+			db.ExecContext(ctx, txtQuery_TempTable)
+			db.ExecContext(ctx, txtQuery_Fill)
+			db.ExecContext(ctx, "set nocount off")
+		*/
+
+		t.SubQuery = append(t.SubQuery, tmpQuery)
 		NestedTable := "#tconst_"
 		JoinData := "slicelast1.date = tconst_2.date"
 		JoinTime := "slicelast1.time = tconst_2.time"
@@ -3438,6 +3474,9 @@ func (t MetaDataWork) ParseQuery(v string) string {
 	v = t.ParsingVTSliceLatest(v)
 
 	v = t.ParseParameters(v)
+	for i := range t.SubQuery {
+		v = t.SubQuery[i] + "\n" + v
+	}
 
 	return v
 }
