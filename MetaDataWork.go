@@ -3136,7 +3136,7 @@ func (t MetaDataWork) PrepareConditionBySliceFirstLast(strCondotion string, Name
 	res := re.FindAllStringSubmatch(txtQuery, -1)
 	for i := range res {
 		keyWord := strings.Trim(res[i][0], " ")
-		txtReplace := ""
+		txtReplace := keyWord
 		if strings.ToUpper(keyWord) == "ТЕКУЩИЙЭЛЕМЕНТ" {
 			txtReplace = NameTable + ".objid"
 		}
@@ -3246,7 +3246,7 @@ func (t MetaDataWork) SliceLast_DBF_SQL(res []string) string {
 
 	ConditionRequisites = strings.Replace(ConditionRequisites, "(", "", -1)
 	ConditionRequisites = strings.Replace(ConditionRequisites, ")", "", -1)
-	if strings.Trim(ConditionRequisites, " ") != "," {
+	if strings.Trim(ConditionRequisites, " \t\n") != "," {
 		listReqv = strings.Split(ConditionRequisites, ",")
 	}
 	for _, nameReqv := range listReqv {
@@ -3269,10 +3269,10 @@ func (t MetaDataWork) SliceLast_DBF_SQL(res []string) string {
 			} else {
 				strConditionColumnsData = strConditionColumnsData + "," + reqvID
 			}
-			txtValue := t.PrepareValue(metaRekv._MDRec, "slicelast")
-			strConditionColumn = strConditionColumn + ",case when slicelast.id = " + reqvID + " then " + txtValue + " end " + nameReqv + "\n	"
-			strGroupColumns = strGroupColumns + ",max(vt_slicelast." + nameReqv + ") as " + nameReqv + "\n	"
 		}
+		txtValue := t.PrepareValue(metaRekv._MDRec, "slicelast")
+		strConditionColumn = strConditionColumn + ",case when slicelast.id = " + reqvID + " then " + txtValue + " end " + nameReqv + "\n	"
+		strGroupColumns = strGroupColumns + ",max(vt_slicelast." + nameReqv + ") as " + nameReqv + "\n	"
 	}
 	if ModeEditData > 1 {
 		strConditionColumnsData = KeyWord + "tconst_1.id in (" + strConditionColumnsData + ")"
@@ -3303,6 +3303,7 @@ func (t MetaDataWork) SliceLast_DBF_SQL(res []string) string {
 	if ExpandPeriods == 1 {
 		txtQuery = txtQuery + ",vt_slicelast.Дата,vt_slicelast.Время,vt_slicelast.Документ\n	"
 	}
+	txtQuery = txtQuery + "	" + strGroupColumns + "\n	"
 	txtQuery = txtQuery + "	from (\n" +
 		"		select\n" +
 		"			slicelast.objid ТекущийЭлемент\n"
