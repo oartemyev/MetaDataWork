@@ -3190,7 +3190,7 @@ func CreateFunctionStrToId(db *sql.DB) {
 }
 
 //СрезПоследних_DBF_SQL
-func (t MetaDataWork) SliceLast_DBF_SQL(res []string) string {
+func (t *MetaDataWork) SliceLast_DBF_SQL(res []string) string {
 	txtQuery := ""
 
 	var ExpandPeriods int
@@ -3246,13 +3246,18 @@ func (t MetaDataWork) SliceLast_DBF_SQL(res []string) string {
 	ModeEditData := 0
 	ModeEditDocum := 0
 
+	if ConditionRequisites[len(ConditionRequisites)-1] == ',' {
+		ConditionRequisites = ConditionRequisites[:len(ConditionRequisites)-1]
+	}
 	ConditionRequisites = strings.Replace(ConditionRequisites, "(", "", -1)
 	ConditionRequisites = strings.Replace(ConditionRequisites, ")", "", -1)
-	if strings.Trim(ConditionRequisites, " \t\n") != "," {
+	ConditionRequisites = strings.Replace(ConditionRequisites, "\n", "", -1)
+	ConditionRequisites = strings.Replace(ConditionRequisites, "\t", " ", -1)
+	if strings.Trim(ConditionRequisites, " \t\n") != "" {
 		listReqv = strings.Split(ConditionRequisites, ",")
 	}
 	for _, nameReqv := range listReqv {
-		metaRekv := spravRec.GetRekvByName(nameReqv)
+		metaRekv := spravRec.GetRekvByName(strings.Trim(nameReqv, " "))
 		if metaRekv.Period == 0 {
 			continue
 		}
@@ -3443,7 +3448,7 @@ func (t MetaDataWork) SliceLast_DBF_SQL(res []string) string {
 }
 
 //ПарсингВТСрезПоследних
-func (t MetaDataWork) ParsingVTSliceLatest(v string) string {
+func (t *MetaDataWork) ParsingVTSliceLatest(v string) string {
 	Param := t.GetStringParam(5)
 	Pattern := `\$СрезПоследних\.([\wа-яё]+[^\wа-яё\(]*)\(` + Param
 	re := t.GetParametersExpressions(Pattern, v)
@@ -3462,7 +3467,7 @@ func (t MetaDataWork) ParsingVTSliceLatest(v string) string {
 
 }
 
-func (t MetaDataWork) ParseQuery(v string) string {
+func (t *MetaDataWork) ParseQuery(v string) string {
 	t.CalculateBoundariesTA()
 	v = t.ParseLastValue(v)
 	t.FillTableOfSources(v)
