@@ -3130,9 +3130,19 @@ func (t MetaDataWork) ParsingVTRegisterBalances(v string) string {
 	return v
 }
 
+func PrepareString(s string) string {
+	s = strings.Replace(s, "\n", "", -1)
+	s = strings.Replace(s, "\t", " ", -1)
+	if s[len(s)-1] == ',' {
+		s = s[:len(s)-1]
+	}
+
+	return strings.Trim(s, " ")
+}
+
 //ПодготовитьУсловиеПоСрезПервыхПоследних
-func (t MetaDataWork) PrepareConditionBySliceFirstLast(strCondotion string, NameTable string) string {
-	txtQuery := strCondotion
+func (t *MetaDataWork) PrepareConditionBySliceFirstLast(strCondotion string, NameTable string) string {
+	txtQuery := PrepareString(strCondotion)
 	Pattern := `'[^']*'|\$?[\wа-я]+\.[\wа-я]+|[:@\$]?[\wа-я]+|[^:@\$\wа-я']+`
 	re := t.GetParametersExpressions(Pattern, strCondotion)
 	res := re.FindAllStringSubmatch(txtQuery, -1)
@@ -3249,6 +3259,7 @@ func (t *MetaDataWork) SliceLast_DBF_SQL(res []string) string {
 	if ConditionRequisites[len(ConditionRequisites)-1] == ',' {
 		ConditionRequisites = ConditionRequisites[:len(ConditionRequisites)-1]
 	}
+
 	ConditionRequisites = strings.Replace(ConditionRequisites, "(", "", -1)
 	ConditionRequisites = strings.Replace(ConditionRequisites, ")", "", -1)
 	ConditionRequisites = strings.Replace(ConditionRequisites, "\n", "", -1)
@@ -3257,11 +3268,11 @@ func (t *MetaDataWork) SliceLast_DBF_SQL(res []string) string {
 		listReqv = strings.Split(ConditionRequisites, ",")
 	}
 	for _, nameReqv := range listReqv {
-		metaRekv := spravRec.GetRekvByName(strings.Trim(nameReqv, " "))
+		metaRekv := spravRec.GetRekvByName(nameReqv)
 		if metaRekv.Period == 0 {
 			continue
 		}
-		reqvID := "sp" + IntToString(metaRekv.ID)
+		reqvID := IntToString(metaRekv.ID)
 		if metaRekv.ChangeDoc == 1 {
 			ModeEditDocum = ModeEditDocum + 1
 			if ModeEditDocum == 1 {
@@ -3302,7 +3313,7 @@ func (t *MetaDataWork) SliceLast_DBF_SQL(res []string) string {
 	//}
 
 	//{ подготовка 4-го параметра СОЕДИНЕНИЕ
-	strJoin = strAddCondition + t.PrepareConditionBySliceFirstLast(Join, "tconst_1")
+	strJoin = strAddCondition + "\n" + t.PrepareConditionBySliceFirstLast(Join, "tconst_1")
 	//}
 
 	txtQuery = txtQuery + "SELECT \n" +
@@ -3353,7 +3364,7 @@ func (t *MetaDataWork) SliceLast_DBF_SQL(res []string) string {
 		 	DROP TABLE #tconst_
 		 create table #tconst_(objid char(9), id int, date datetime, time int, iddoc char(9))
 
-		 insert into #tconst_\n
+		 insert into #tconst_
 		 select
 		 tconst.objid
 		,tconst.id
