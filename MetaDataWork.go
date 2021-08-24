@@ -1774,6 +1774,30 @@ func (t *RegRec) AddRekv(sID string, ID string, rc interface{}) {
 	t.Rekv.Add(sID, ID, rc)
 }
 
+func GetCMMS_FromString(filename string) CMMS {
+
+	// btStream := []byte(filename)
+
+	// decoder := charmap.Windows1251.NewDecoder()
+	// buf := bytes.NewBuffer([]byte{})
+	// buf.Write(btStream)
+
+	// reader := decoder.Reader(buf)
+	// b, err := ioutil.ReadAll(reader)
+	// if err != nil {
+	// 	panic(err)
+	// }
+	// sss := string(b)
+
+	// lex := *NewLexer(sss)
+	lex := *NewLexer(filename)
+
+	c := NewCMMS("root")
+	c.ParseMetaData(lex)
+
+	return *c
+}
+
 func GetCMMS(filename string) CMMS {
 
 	var data []byte
@@ -3700,8 +3724,63 @@ func GetFileStat(fileName string) (os.FileInfo, error) {
 
 func (t MetaDataWork) GetConnectString() string {
 
-	return fmt.Sprintf("server=%s;user id=%s;password=%s;port=%d;database=%s;",
+	return fmt.Sprintf("server=%s;user id=%s;password=%s;port=%d;database=%s;encrypt=disable",
 		t.ConnectInfo.Server, t.ConnectInfo.User, t.ConnectInfo.Psw, 1433, t.ConnectInfo.DB)
+
+}
+
+func (t *MetaDataWork) AttachFromSQL(db *sql.DB, FirmaID int) error {
+	var rows *sql.Rows
+	var err error
+
+	ctx := context.Background()
+	err = db.PingContext(ctx)
+	if err != nil {
+		return err
+	}
+
+	Query := fmt.Sprintf("SELECT [Value] FROM Analiz_EN.dbo.MdFile WHERE FirmaID=%d AND [FileName]='1Cv7.DBA'", FirmaID)
+	rows, err = db.QueryContext(ctx, Query)
+	if err != nil {
+		return err
+	}
+	var tmpConn string
+	for rows.Next() {
+
+		err = rows.Scan(&tmpConn)
+		if err != nil {
+			return err
+		}
+	}
+
+	t.ConnectInfo = *new(ParseDBA.ConnectInfo)
+	t.ConnectInfo.ParseConnect(tmpConn)
+
+	Query = fmt.Sprintf("SELECT [Value] FROM Analiz_EN.dbo.MdFile WHERE FirmaID=%d AND [FileName]='1Cv7.MD'", FirmaID)
+	rows, err = db.QueryContext(ctx, Query)
+	if err != nil {
+		return err
+	}
+	for rows.Next() {
+
+		err = rows.Scan(&tmpConn)
+		if err != nil {
+			return err
+		}
+	}
+
+	var c CMMS = GetCMMS_FromString(tmpConn)
+	// var data []byte
+
+	// data, err = ioutil.ReadFile(FileMDP)
+	// err = json.Unmarshal(data, &c)
+	t.c = c
+
+	//GetCMMS_FromString(filename string)
+
+	t.ParseMD()
+
+	return nil
 
 }
 
@@ -4069,6 +4148,42 @@ func (t *ODBCRecordset) Connection(connString string) error {
 	return nil
 }
 
+func (t *ODBCRecordset) AttachFromSQL(db *sql.DB, FirmaID int) error {
+	e := t.MetaDataWork.AttachFromSQL(db, FirmaID)
+	if e != nil {
+		return e
+	}
+
+	db.Close()
+
+	connString := t.MetaDataWork.GetConnectString()
+	connector, err := mssql.NewConnector(connString)
+	if err != nil {
+		return err
+	}
+	connector.SessionInitSQL = "SET ANSI_NULLS ON"
+	t.db = sql.OpenDB(connector)
+
+	t.ctx = context.Background()
+	err = t.db.PingContext(t.ctx)
+	if err != nil {
+		return err
+	}
+
+	t.conn, err = t.db.Conn(t.ctx)
+	if err != nil {
+		return err
+	}
+
+	// t.db = sql.OpenDB(connector)
+	// if t.err != nil {
+	// 	//log.Fatal("Error creating connection pool: ", err.Error())
+	// 	return t.err
+	// }
+
+	return nil
+}
+
 func (t *ODBCRecordset) AttachMD(fileName string) error {
 	t.MetaDataWork.AttachMD(fileName)
 
@@ -4155,6 +4270,7 @@ func (t *ODBCRecordset) Exec(q string) error {
 	if t.err != nil {
 
 		fmt.Println(q)
+		fmt.Println(t.err)
 
 		return t.err
 	}
