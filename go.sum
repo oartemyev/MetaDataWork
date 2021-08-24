@@ -8,6 +8,8 @@ github.com/oartemyev/ParseDBA v0.0.0-20210723084512-e28e2b9730b3 h1:tbnY1lFtfi45
 github.com/oartemyev/ParseDBA v0.0.0-20210723084512-e28e2b9730b3/go.mod h1:9sg2Ona5n8bgr8TQ3ukDRk4nSqV3tMa1adeWRIGcl8U=
 github.com/oartemyev/ParseDBA v0.0.0-20210728103244-488d2b891f11 h1:cQKJmRywN0qmWl7We7NTMmRmEc4fGX/X+Qe+UV0tXdw=
 github.com/oartemyev/ParseDBA v0.0.0-20210728103244-488d2b891f11/go.mod h1:9sg2Ona5n8bgr8TQ3ukDRk4nSqV3tMa1adeWRIGcl8U=
+github.com/oartemyev/ParseDBA v0.0.0-20210824133507-3af91e87932d h1:Nvv+5MdCTJ4MNTXVmWbr7It7OVfB4kjH2HgPedXFiew=
+github.com/oartemyev/ParseDBA v0.0.0-20210824133507-3af91e87932d/go.mod h1:9sg2Ona5n8bgr8TQ3ukDRk4nSqV3tMa1adeWRIGcl8U=
 github.com/pmezard/go-difflib v1.0.0 h1:4DBwDE0NGyQoBHbLQYPwSUPoCMWR5BEzIk/f1lZbAQM=
 github.com/pmezard/go-difflib v1.0.0/go.mod h1:iKH77koFhYxTK1pcRnkKkqfTogsbg7gZNVY4sRDYZ/4=
 github.com/softlandia/cpd v0.0.0-20210117083209-2413526f2815 h1:TbZ+NyG8j1iSU1Ge9waOE8yxaSeXtYtHn3nbu+parlU=
