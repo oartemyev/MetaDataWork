@@ -3490,6 +3490,359 @@ func (t *MetaDataWork) SliceLast_DBF_SQL(res []string) string {
 	return txtQuery
 }
 
+//СрезПервых_DBF_SQL
+func (t *MetaDataWork) SliceFirst_DBF_SQL(res []string) string {
+	txtQuery := ""
+
+	var ExpandPeriods int
+	var err error
+
+	SpravID := res[1]
+	BeginPeriod := res[2]
+	ConditionRequisites := res[3]
+	AdditionalConditions := res[4]
+	Join := res[5]
+	_ExpandPeriods := res[6]
+	if strings.Trim(_ExpandPeriods, " ") == "," {
+		ExpandPeriods = 0
+	} else {
+		ExpandPeriods, err = strconv.Atoi(strings.Trim(_ExpandPeriods, " "))
+		if err != nil {
+			ExpandPeriods = 0
+		}
+	}
+	spravRec := t.GetSpravByName(SpravID)
+	//strConditionByAttributes := ""
+	strConditionColumn := ""
+	strConditionColumnsData := ""
+	strConditionColumnsDoc := ""
+	strConditionData := ""
+	strGroupColumns := ""
+	strAddCondition := ""
+	strJoin := ""
+	KeyWord := "where "
+	NameTableSprav := "SC" + IntToString(spravRec.ID)
+	//{ подготовка 1-го параметра НАЧАЛОПЕРИОДА
+	if strings.Trim(BeginPeriod, " ") != "," {
+		tt := t.PrepareBoundaryPeriod(BeginPeriod)
+		if tt.active == 0 {
+			return ""
+		}
+		//DataEndCalc := tt.data
+		BorderEndCalc := tt.border
+		//TimeEndCalc := tt.Time
+		//ValueBorderCalc := tt.value
+
+		strConditionData = KeyWord + `tconst_1.date >= '` + BorderEndCalc + `'`
+		KeyWord = "and "
+	}
+	//}
+
+	//{ подготовка 2-го параметра РЕКВИЗИТЫ
+	NameTempTable := "slicelast_" + NameTableSprav
+
+	var listReqv []string = make([]string, 0)
+
+	ModeEditData := 0
+	ModeEditDocum := 0
+
+	if ConditionRequisites[len(ConditionRequisites)-1] == ',' {
+		ConditionRequisites = ConditionRequisites[:len(ConditionRequisites)-1]
+	}
+
+	ConditionRequisites = strings.Replace(ConditionRequisites, "(", "", -1)
+	ConditionRequisites = strings.Replace(ConditionRequisites, ")", "", -1)
+	ConditionRequisites = strings.Replace(ConditionRequisites, "\n", "", -1)
+	ConditionRequisites = strings.Replace(ConditionRequisites, "\t", " ", -1)
+	if strings.Trim(ConditionRequisites, " \t\n") != "" {
+		listReqv = strings.Split(ConditionRequisites, ",")
+	}
+
+	allReqv := spravRec.GetRekvCount()
+	for cntR := 0; cntR < allReqv; cntR++ {
+		//for _, nameReqv := range listReqv {
+		metaRekv := spravRec.GetRekvByNum(cntR)
+		//metaRekv := spravRec.GetRekvByName(nameReqv)
+		nameReqv := metaRekv.SID
+		if len(listReqv) > 0 {
+			if Find(listReqv, nameReqv) == len(listReqv) {
+				continue
+			}
+		}
+		if metaRekv.Period == 0 {
+			continue
+		}
+		reqvID := IntToString(metaRekv.ID)
+		if metaRekv.ChangeDoc == 1 {
+			ModeEditDocum = ModeEditDocum + 1
+			if ModeEditDocum == 1 {
+				strConditionColumnsDoc = strConditionColumnsDoc + reqvID
+			} else {
+				strConditionColumnsDoc = strConditionColumnsDoc + "," + reqvID
+			}
+		} else {
+			ModeEditData = ModeEditData + 1
+			if ModeEditData == 1 {
+				strConditionColumnsData = strConditionColumnsData + reqvID
+			} else {
+				strConditionColumnsData = strConditionColumnsData + "," + reqvID
+			}
+		}
+		txtValue := t.PrepareValue(metaRekv._MDRec, "slicelast")
+		strConditionColumn = strConditionColumn + ",case when slicelast.id = " + reqvID +
+			" then " + txtValue + " end " + nameReqv + "\n	"
+		strGroupColumns = strGroupColumns + ",max(vt_slicelast." + nameReqv + ") as " + nameReqv + "\n	"
+	}
+	if ModeEditData > 1 {
+		strConditionColumnsData = KeyWord + "tconst_1.id in (" + strConditionColumnsData + ")"
+	} else {
+		strConditionColumnsData = KeyWord + "tconst_1.id = " + strConditionColumnsData
+	}
+	if ModeEditDocum > 1 {
+		strConditionColumnsDoc = KeyWord + "tconst_1.id in (" + strConditionColumnsDoc + ")"
+	} else {
+		strConditionColumnsDoc = KeyWord + "tconst_1.id = " + strConditionColumnsDoc
+	}
+	KeyWord = " and "
+	//}
+
+	//{ подготовка 3-го параметра ДОПОЛНИТЕЛЬНЫЕ УСЛОВИЯ
+	if strings.Trim(AdditionalConditions, " ") != "," {
+		strAddCondition = " and "
+	}
+	strAddCondition = strAddCondition + t.PrepareConditionBySliceFirstLast(AdditionalConditions, "tconst_1")
+	//}
+
+	//{ подготовка 4-го параметра СОЕДИНЕНИЕ
+	strJoin = "\n" + t.PrepareConditionBySliceFirstLast(Join, "tconst_1")
+	//}
+
+	tmpStr := ""
+	if ExpandPeriods == 1 {
+		tmpStr = ",vt_slicelast.Дата,vt_slicelast.Время,vt_slicelast.Документ"
+	}
+
+	txtQuery = txtQuery + `SELECT
+		vt_slicelast.ТекущийЭлемент
+		` + tmpStr + `
+		` + strGroupColumns + `
+		from (
+			select
+				slicelast.objid ТекущийЭлемент
+				`
+	if ExpandPeriods == 1 {
+		txtQuery = txtQuery + `,slicelast.date Дата,slicelast.time Время,slicelast.docid Документ
+				`
+	}
+	txtQuery = txtQuery + `
+		` + strConditionColumn + `
+				from (`
+	if ModeEditData > 0 {
+		txtQuery = txtQuery + `
+			select tconst_2.objid, tconst_2.id, tconst_2.date, 0 time, '     0   ' docid, tconst_2.value
+			from (
+				select tconst_1.objid, tconst_1.id, max(tconst_1.date) date
+				from _1SCONST tconst_1 (NOLOCK)
+				` + strJoin + `
+				` + strConditionData + `
+				` + strConditionColumnsData + `
+				` + strAddCondition + `
+				group by tconst_1.id,  tconst_1.objid) slicelast1
+			inner join _1SCONST tconst_2 (NOLOCK)
+			on slicelast1.id = tconst_2.id
+			and slicelast1.objid = tconst_2.objid
+			and slicelast1.date = tconst_2.date`
+	}
+
+	if ModeEditDocum > 0 {
+		if ModeEditData > 0 {
+			txtQuery = txtQuery + `
+				UNION ALL
+				`
+		}
+		txtQuery = txtQuery + `
+						select tconst_4.objid, tconst_4.id, tconst_4.date, tconst_4.time, tconst_4.docid, tconst_4.value
+						from (
+							select tconst_3.objid, tconst_3.id, tconst_3.date, tconst_3.time, max(tconst_3.docid) docid
+							from (
+								select tconst_2.objid, tconst_2.id, tconst_2.date, max(tconst_2.time) time
+								from (
+									select tconst_1.objid, tconst_1.id, max(tconst_1.date) date
+									from _1SCONST tconst_1 (NOLOCK)
+									` + strJoin + `
+									` + strConditionData + `
+									` + strConditionColumnsDoc + `
+									` + strAddCondition + `
+									group by tconst_1.id, tconst_1.objid) slicelast1
+								inner join _1SCONST tconst_2 (NOLOCK)
+								on slicelast1.id = tconst_2.id
+								and slicelast1.objid = tconst_2.objid
+								and slicelast1.date = tconst_2.date
+								group by tconst_2.id, tconst_2.objid, tconst_2.date) slicelast2				
+							inner join _1SCONST tconst_3 (NOLOCK)
+							on slicelast2.id = tconst_3.id
+							and slicelast2.objid = tconst_3.objid
+							and slicelast2.date = tconst_3.date
+							and slicelast2.time = tconst_3.time
+							group by tconst_3.id, tconst_3.objid, tconst_3.date, tconst_3.time) slicelast3
+						inner join _1SCONST tconst_4 (NOLOCK)
+						on slicelast3.id = tconst_4.id
+						and slicelast3.objid = tconst_4.objid
+						and slicelast3.date = tconst_4.date
+						and slicelast3.time = tconst_4.time
+						and slicelast3.docid = tconst_4.docid
+			`
+	}
+	txtQuery = txtQuery + `		) slicelast
+		) vt_slicelast
+		group by vt_slicelast.ТекущийЭлемент
+		`
+	if ExpandPeriods == 1 {
+		txtQuery = txtQuery + `		,vt_slicelast.Дата,vt_slicelast.Время,vt_slicelast.Документ`
+	}
+	txtQuery = strings.Replace(txtQuery, "slicelast", NameTempTable, -1)
+
+	txtQuery = "( " + txtQuery + " ) "
+
+	return txtQuery
+}
+
+//История_DBF_SQL
+func (t *MetaDataWork) History_DBF_SQL(res []string) string {
+	txtQuery := ""
+
+	//var ExpandPeriods int
+	//var err error
+
+	SpravID := res[1]
+	BeginPeriod := res[2]
+	EndPeriod := res[3]
+	ConditionRequisites := res[4]
+	AdditionalConditions := res[5]
+	Join := res[6]
+
+	spravRec := t.GetSpravByName(SpravID)
+	strColumn := ""
+	strConditionBeginPeriod := ""
+	strConditionEndPeriod := ""
+	strAddCondition := ""
+	StrConditionRequisites := ""
+	strJoin := ""
+	KeyWord := "where "
+	//NameTableSprav := "SC" + IntToString(spravRec.ID)
+
+	//{ подготовка 1-го параметра НАЧАЛОПЕРИОДА
+	if strings.Trim(BeginPeriod, " ") != "," {
+		tt := t.PrepareBoundaryPeriod(BeginPeriod)
+		if tt.active == 0 {
+			return ""
+		}
+		//DataEndCalc := tt.data
+		BorderEndCalc := tt.border
+		//TimeEndCalc := tt.Time
+		//ValueBorderCalc := tt.value
+
+		strConditionBeginPeriod = KeyWord + `tconst_1.date >= '` + BorderEndCalc + `'`
+		KeyWord = "and "
+	}
+	//}
+	//{ подготовка 2-го параметра КОНЕЦПЕРИОДА
+	if strings.Trim(EndPeriod, " ") != "," {
+		tt := t.PrepareBoundaryPeriod(EndPeriod)
+		if tt.active == 0 {
+			return ""
+		}
+		//DataEndCalc := tt.data
+		BorderEndCalc := tt.border
+		//TimeEndCalc := tt.Time
+		//ValueBorderCalc := tt.value
+
+		strConditionEndPeriod = KeyWord + `tconst_1.date <= '` + BorderEndCalc + `'`
+		KeyWord = "and "
+	}
+	//}
+
+	//{ подготовка 3-го параметра РЕКВИЗИТЫ
+	var listReqv []string = make([]string, 0)
+
+	if ConditionRequisites[len(ConditionRequisites)-1] == ',' {
+		ConditionRequisites = ConditionRequisites[:len(ConditionRequisites)-1]
+	}
+
+	ConditionRequisites = strings.Replace(ConditionRequisites, "(", "", -1)
+	ConditionRequisites = strings.Replace(ConditionRequisites, ")", "", -1)
+	ConditionRequisites = strings.Replace(ConditionRequisites, "\n", "", -1)
+	ConditionRequisites = strings.Replace(ConditionRequisites, "\t", " ", -1)
+	if strings.Trim(ConditionRequisites, " \t\n") != "" {
+		listReqv = strings.Split(ConditionRequisites, ",")
+	}
+
+	strValueRequisites := ""
+
+	allReqv := spravRec.GetRekvCount()
+	for cntR := 0; cntR < allReqv; cntR++ {
+		metaRekv := spravRec.GetRekvByNum(cntR)
+		//metaRekv := spravRec.GetRekvByName(nameReqv)
+		nameReqv := metaRekv.SID
+		if len(listReqv) > 0 {
+			if Find(listReqv, nameReqv) == len(listReqv) {
+				continue
+			}
+		}
+		if metaRekv.Period == 0 {
+			continue
+		}
+		reqvID := IntToString(metaRekv.ID)
+		txtValue := t.PrepareValue(metaRekv._MDRec, "history")
+		if strings.Trim(strValueRequisites, " \t\n") != "" {
+			strValueRequisites = strValueRequisites + " , " + reqvID
+		} else {
+			strValueRequisites = reqvID
+		}
+		strColumn = strColumn + ",case when history.id = " + reqvID + " then " + txtValue + " end " + nameReqv + "\r\n"
+	}
+	StrConditionRequisites = KeyWord + " history.id "
+	if len(listReqv) > 1 {
+		StrConditionRequisites = StrConditionRequisites + " in ("
+	} else {
+		StrConditionRequisites = StrConditionRequisites + "= "
+	}
+	StrConditionRequisites = StrConditionRequisites + strValueRequisites
+	if len(listReqv) > 1 {
+		StrConditionRequisites = StrConditionRequisites + ")"
+	}
+	KeyWord = " and "
+	//}
+
+	//{ подготовка 4-го параметра ДОПОЛНИТЕЛЬНЫЕ УСЛОВИЯ
+	if strings.Trim(AdditionalConditions, " ") != "," {
+		strAddCondition = " and "
+	}
+	strAddCondition = strAddCondition + t.PrepareConditionBySliceFirstLast(AdditionalConditions, "tconst_1")
+	//}
+
+	//{ подготовка 5-го параметра СОЕДИНЕНИЕ
+	strJoin = "\n" + t.PrepareConditionBySliceFirstLast(Join, "tconst_1")
+	//}
+
+	txtQuery = txtQuery + `	select
+			history.objid ТекущийЭлемент
+			,history.date Дата
+			,history.time Время
+			,history.docid Документ
+			` + strColumn + `
+		FROM _1SCONST history (NOLOCK)
+		` + strJoin + `
+		` + strConditionBeginPeriod + `
+		` + strConditionEndPeriod + `
+		` + StrConditionRequisites + `
+		` + strAddCondition
+
+	txtQuery = "( " + txtQuery + " ) "
+
+	return txtQuery
+}
+
 //ПарсингВТСрезПоследних
 func (t *MetaDataWork) ParsingVTSliceLatest(v string) string {
 	Param := t.GetStringParam(5)
@@ -3501,6 +3854,46 @@ func (t *MetaDataWork) ParsingVTSliceLatest(v string) string {
 	res := re.FindAllStringSubmatch(v, -1)
 	for i := range res {
 		strChange := t.SliceLast_DBF_SQL(res[i])
+		if strChange != "" {
+			v = strings.Replace(v, res[i][0], strChange, -1)
+		}
+	}
+
+	return v
+
+}
+
+//ПарсингВТСрезПервых
+func (t *MetaDataWork) ParsingVTScutFirst(v string) string {
+	Param := t.GetStringParam(5)
+	Pattern := `\$СрезПервых\.([\wа-яё]+[^\wа-яё\(]*)\(` + Param
+	re := t.GetParametersExpressions(Pattern, v)
+	if re == nil {
+		return v
+	}
+	res := re.FindAllStringSubmatch(v, -1)
+	for i := range res {
+		strChange := t.SliceFirst_DBF_SQL(res[i])
+		if strChange != "" {
+			v = strings.Replace(v, res[i][0], strChange, -1)
+		}
+	}
+
+	return v
+
+}
+
+//ПарсингВТИстория
+func (t *MetaDataWork) ParsingVTIhistory(v string) string {
+	Param := t.GetStringParam(5)
+	Pattern := `\$История\.([\wа-яё]+[^\wа-яё\(]*)\(` + Param
+	re := t.GetParametersExpressions(Pattern, v)
+	if re == nil {
+		return v
+	}
+	res := re.FindAllStringSubmatch(v, -1)
+	for i := range res {
+		strChange := t.History_DBF_SQL(res[i])
 		if strChange != "" {
 			v = strings.Replace(v, res[i][0], strChange, -1)
 		}
@@ -3532,9 +3925,15 @@ func (t *MetaDataWork) ParseQuery(v string) (string, error) {
 	v = t.ParsingDataSources(v)
 
 	v = t.ParsingTableAttributes(v)
+	//ПарсингВТРегистрОстатки
 	v = t.ParsingVTRegisterBalances(v)
 
+	//ПарсингВТСрезПоследних
 	v = t.ParsingVTSliceLatest(v)
+	//ПарсингВТСрезПервых
+	v = t.ParsingVTScutFirst(v)
+	//ПарсингВТИстория
+	v = t.ParsingVTIhistory(v)
 
 	v = t.ParseParameters(v)
 	for i := range t.SubQuery {
