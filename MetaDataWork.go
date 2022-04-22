@@ -3101,7 +3101,7 @@ func (t MetaDataWork) RegistrRests(res []string) string {
 	if Join != "," {
 		txtQuery = txtQuery + t.PrepareConditionRegistr(Join, RegistID, "totalreg")
 	}
-	txtQuery = txtQuery + "WHERE\n\t totalreg.PERIOD = '" + BorderTabItog + "'\n\t"
+	txtQuery = txtQuery + "\nWHERE\n\t totalreg.PERIOD = '" + BorderTabItog + "'\n\t"
 	if Compare != "," {
 		_Condition := t.PrepareConditionRegistr(Compare, RegistID, "totalreg")
 		txtQuery = txtQuery + " AND \n\t " + _Condition
@@ -3127,14 +3127,14 @@ func (t MetaDataWork) RegistrRests(res []string) string {
 		if Join != "," {
 			txtQuery = txtQuery + t.PrepareConditionRegistr(Join, RegistID, "accumreg")
 		}
-		keyWord := "WHERE"
+		keyWord := "\nWHERE"
 		txtQuery = txtQuery + keyWord + " (" + strDataTable + " >= '" + beginBorderMove + beginTimeMove + "')\n\t" +
 			"AND (" + strDataTable + " < '" + endBorderMove + endTimeMove + "')\n\t"
-		keyWord = "AND"
+		keyWord = "\nAND"
 		if Compare != "," {
 			_Condition := t.PrepareConditionRegistr(Compare, RegistID, "accumreg")
 			txtQuery = txtQuery + keyWord + "\n\t" + _Condition + "\n\t"
-			keyWord = "AND"
+			keyWord = "\nAND"
 		}
 	}
 	txtQuery = txtQuery + ") AS vt_totalreg\n\tGROUP BY\n\t\t" + strIzmItog + "\n\tHAVING " + strResursHaving + "\n\t"
@@ -3303,7 +3303,7 @@ func (t *MetaDataWork) SliceLast_DBF_SQL(res []string) string {
 	strGroupColumns := ""
 	strAddCondition := ""
 	strJoin := ""
-	KeyWord := "where "
+	KeyWord := "\nwhere "
 	NameTableSprav := "SC" + IntToString(spravRec.ID)
 	//{ подготовка 1-го параметра КОНЕЦПЕРИОДА
 	if strings.Trim(BeginPeriod, " ") != "," {
@@ -3520,7 +3520,7 @@ func (t *MetaDataWork) SliceFirst_DBF_SQL(res []string) string {
 	strGroupColumns := ""
 	strAddCondition := ""
 	strJoin := ""
-	KeyWord := "where "
+	KeyWord := "\nwhere "
 	NameTableSprav := "SC" + IntToString(spravRec.ID)
 	//{ подготовка 1-го параметра НАЧАЛОПЕРИОДА
 	if strings.Trim(BeginPeriod, " ") != "," {
@@ -3728,7 +3728,7 @@ func (t *MetaDataWork) History_DBF_SQL(res []string) string {
 	strAddCondition := ""
 	StrConditionRequisites := ""
 	strJoin := ""
-	KeyWord := "where "
+	KeyWord := "\nwhere "
 	//NameTableSprav := "SC" + IntToString(spravRec.ID)
 
 	//{ подготовка 1-го параметра НАЧАЛОПЕРИОДА
@@ -4688,6 +4688,44 @@ func (t *ODBCRecordset) Exec(q string) error {
 	}
 
 	return t.err
+}
+
+type rowAbstract map[string]interface{}
+
+func (t ODBCRecordset) ToJson() ([]byte, error) {
+	//masterData := make(map[string][]interface{})
+	masterData := []rowAbstract{}
+	var buf []byte
+	var err error
+
+	for t.rows.Next() {
+		err = t.rows.Scan(t.vals...)
+		if err != nil {
+			return nil, err
+		}
+		//result := make(map[string]interface{}, len(t.cols))
+		result := make(rowAbstract, len(t.cols))
+		for i, v := range t.vals {
+
+			//masterData[t.cols[i]] = append(masterData[t.cols[i]], v[0])
+			result[t.cols[i]] = v
+
+			// x := v.([]byte)
+			// if nx, ok := strconv.ParseFloat(string(x), 64); ok == nil {
+			//     masterData[t.cols[i]] = append(masterData[t.cols[i]], nx)
+			// } else if b, ok := strconv.ParseBool(string(x)); ok == nil {
+			//     masterData[t.cols[i]] = append(masterData[t.cols[i]], b)
+			// } else if "string" == fmt.Sprintf("%T", string(x)) {
+			//     masterData[t.cols[i]] = append(masterData[t.cols[i]], string(x))
+			// } else {
+			//     fmt.Printf("Failed on if for type %T of %v\n", x, x)
+			// }
+		}
+		masterData = append(masterData, result)
+	}
+	buf, err = json.Marshal(masterData)
+
+	return buf, err
 }
 
 func (t ODBCRecordset) GetCols() []string {
