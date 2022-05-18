@@ -4691,6 +4691,42 @@ func (t *ODBCRecordset) Exec(q string) error {
 }
 
 type rowAbstract map[string]interface{}
+type RowAbstract map[string]interface{}
+
+func (t ODBCRecordset) GetRows() ([]RowAbstract, error) {
+	//masterData := make(map[string][]interface{})
+	masterData := []RowAbstract{}
+	var buf []byte
+	var err error
+
+	for t.rows.Next() {
+		err = t.rows.Scan(t.vals...)
+		if err != nil {
+			return nil, err
+		}
+		//result := make(map[string]interface{}, len(t.cols))
+		result := make(rowAbstract, len(t.cols))
+		for i, v := range t.vals {
+
+			//masterData[t.cols[i]] = append(masterData[t.cols[i]], v[0])
+			result[t.cols[i]] = v
+
+			// x := v.([]byte)
+			// if nx, ok := strconv.ParseFloat(string(x), 64); ok == nil {
+			//     masterData[t.cols[i]] = append(masterData[t.cols[i]], nx)
+			// } else if b, ok := strconv.ParseBool(string(x)); ok == nil {
+			//     masterData[t.cols[i]] = append(masterData[t.cols[i]], b)
+			// } else if "string" == fmt.Sprintf("%T", string(x)) {
+			//     masterData[t.cols[i]] = append(masterData[t.cols[i]], string(x))
+			// } else {
+			//     fmt.Printf("Failed on if for type %T of %v\n", x, x)
+			// }
+		}
+		masterData = append(masterData, result)
+	}
+
+	return masterData, err
+}
 
 func (t ODBCRecordset) ToJson() ([]byte, error) {
 	//masterData := make(map[string][]interface{})
