@@ -4538,10 +4538,27 @@ func NewODBCRecordset() ODBCRecordset {
 
 func (t *ODBCRecordset) Connection(connString string) error {
 
-	t.db, t.err = sql.Open("sqlserver", connString)
-	if t.err != nil {
-		//log.Fatal("Error creating connection pool: ", err.Error())
-		return t.err
+//	t.db, t.err = sql.Open("sqlserver", connString)
+//	if t.err != nil {
+//		//log.Fatal("Error creating connection pool: ", err.Error())
+//		return t.err
+//	}
+	connector, err := mssql.NewConnector(connString)
+	if err != nil {
+		return err
+	}
+	connector.SessionInitSQL = "SET ANSI_NULLS ON"
+	t.db = sql.OpenDB(connector)
+
+	t.ctx = context.Background()
+	err = t.db.PingContext(t.ctx)
+	if err != nil {
+		return err
+	}
+
+	t.conn, err = t.db.Conn(t.ctx)
+	if err != nil {
+		return err
 	}
 
 	return nil
@@ -4696,7 +4713,6 @@ type RowAbstract map[string]interface{}
 func (t ODBCRecordset) GetRows() ([]RowAbstract, error) {
 	//masterData := make(map[string][]interface{})
 	masterData := []RowAbstract{}
-	var buf []byte
 	var err error
 
 	for t.rows.Next() {
@@ -4705,7 +4721,7 @@ func (t ODBCRecordset) GetRows() ([]RowAbstract, error) {
 			return nil, err
 		}
 		//result := make(map[string]interface{}, len(t.cols))
-		result := make(rowAbstract, len(t.cols))
+		result := make(RowAbstract, len(t.cols))
 		for i, v := range t.vals {
 
 			//masterData[t.cols[i]] = append(masterData[t.cols[i]], v[0])
