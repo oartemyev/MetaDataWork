@@ -6,6 +6,7 @@ import (
 	"encoding/binary"
 	"fmt"
 	"io/ioutil"
+	"log"
 	"math"
 	"os"
 	"path/filepath"
@@ -29,6 +30,7 @@ import (
 	//"honnef.co/go/tools/analysis/facts/nilness"
 	mssql "github.com/denisenkom/go-mssqldb"
 	"github.com/oartemyev/ParseDBA"
+	"github.com/richardlehane/mscfb"
 )
 
 //=======================  НАЧАЛО КЛАССА Storage ===========================================
@@ -86,7 +88,7 @@ var FAT []int32
 var FAT_sectors []int32
 
 //var miniFAT []int32
-var max_sector_index int32
+var max_sector_index uint32
 
 //var directory_entries []DirectoryEntry
 //var directory_entries_id_by_name map[string]int
@@ -97,14 +99,17 @@ var ObjectsByID map[string]interface{}
 type Storage struct {
 	binary_data []byte
 
-	minor_version, major_version                 int16
-	bom, sector_shift_exp, mini_sector_shift_exp int16
-	sector_size, mini_sector_size                int16
+	minor_version, major_version                 uint16
+	bom, sector_shift_exp, mini_sector_shift_exp uint16
+	sector_size, mini_sector_size                uint16
 
 	number_of_directory_sectors, number_of_FAT_sectors, first_directory_sector_location,
 	transaction_signature_number, mini_stream_cutoff_size, first_Mini_FAT_sector_location,
-	number_of_Mini_FAT_sectors, first_DIFAT_sector_location, number_of_DIFAT_sectors,
+	first_DIFAT_sector_location,
 	max_sector_index int32
+
+	number_of_DIFAT_sectors    uint32
+	number_of_Mini_FAT_sectors uint32
 
 	DIFAT_sectors []int32
 	DIFAT         []int32
@@ -192,7 +197,7 @@ func Sec_num_to_offset(sector_number int32, sector_size int32) int32 {
 }
 
 func sector(sector_number int32) []byte {
-	if (0 <= sector_number) && (sector_number <= max_sector_index) {
+	if (0 <= sector_number) && (uint32(sector_number) <= max_sector_index) {
 		return binary_data[sec_num_to_offset(sector_number):sec_num_to_offset(sector_number+1)]
 	}
 
@@ -322,6 +327,68 @@ func ReadInt32Array(b []byte, len int) []int32 {
 
 }
 
+func ReadUInt16(b []byte) uint16 {
+	var i uint16
+	buf := bytes.NewBuffer([]byte{})
+	buf.Write(b)
+	//	err = binary.Read(buf, binary.BigEndian, &minor_version)
+	err := binary.Read(buf, binary.LittleEndian, &i)
+	if err != nil {
+		panic(err)
+	}
+
+	return i
+
+}
+
+func ReadUInt32(b []byte) uint32 {
+	var i uint32
+	buf := bytes.NewBuffer([]byte{})
+	buf.Write(b)
+	//	err = binary.Read(buf, binary.BigEndian, &minor_version)
+	err := binary.Read(buf, binary.LittleEndian, &i)
+	if err != nil {
+		panic(err)
+	}
+
+	return i
+
+}
+
+func ReadUInt64(b []byte) uint64 {
+	var i uint64
+	buf := bytes.NewBuffer([]byte{})
+	buf.Write(b)
+	//	err = binary.Read(buf, binary.BigEndian, &minor_version)
+	err := binary.Read(buf, binary.LittleEndian, &i)
+	if err != nil {
+		panic(err)
+	}
+
+	return i
+
+}
+
+func ReadUInt32Array(b []byte, len int) []uint32 {
+	var i uint32
+	var k int
+	bb := []uint32{}
+	var err error
+	buf := bytes.NewBuffer([]byte{})
+	buf.Write(b)
+	//	err = binary.Read(buf, binary.BigEndian, &minor_version)
+	for k = 0; k < len; k++ {
+		err = binary.Read(buf, binary.LittleEndian, &i)
+		if err != nil {
+			panic(err)
+		}
+		bb = append(bb, i)
+	}
+
+	return bb
+
+}
+
 func StgOpenStorage(fileName string) *Storage {
 
 	data, err := ioutil.ReadFile(fileName)
@@ -337,30 +404,31 @@ func StgOpenStorage(fileName string) *Storage {
 	stg.curDir = 0
 	stg.binary_data = data
 
-	stg.minor_version = ReadInt16(data[24:26])
-	stg.major_version = ReadInt16(data[26:28])
+	stg.minor_version = ReadUInt16(data[24:26])
+	stg.major_version = ReadUInt16(data[26:28])
 
-	stg.bom = ReadInt16(data[28:30])
-	stg.sector_shift_exp = ReadInt16(data[30:32])
-	stg.mini_sector_shift_exp = ReadInt16(data[32:34])
+	stg.bom = ReadUInt16(data[28:30])
+	stg.sector_shift_exp = ReadUInt16(data[30:32])
+	stg.mini_sector_shift_exp = ReadUInt16(data[32:34])
 
 	if !((stg.sector_shift_exp == 9 && stg.major_version == 3) || (stg.sector_shift_exp == 12 && stg.major_version == 4)) {
 		//panic("Sector shift must be 2^9=512 for v3 and 2^12=4096 for v4")
 		return nil
 	}
 
-	stg.sector_size = int16(math.Pow(2, float64(stg.sector_shift_exp)))
-	stg.mini_sector_size = int16(math.Pow(2, float64(stg.mini_sector_shift_exp)))
+	//	stg.sector_size = int16(math.Pow(2, float64(stg.sector_shift_exp)))
+	stg.sector_size = uint16(math.Pow(2, float64(stg.sector_shift_exp-1)))
+	stg.mini_sector_size = uint16(math.Pow(2, float64(stg.mini_sector_shift_exp)))
 
 	stg.number_of_directory_sectors = ReadInt32(data[40:44])
 	stg.number_of_FAT_sectors = ReadInt32(data[44:48])
 	stg.first_directory_sector_location = ReadInt32(data[48:52])
 	stg.transaction_signature_number = ReadInt32(data[52:56])
-	stg.mini_stream_cutoff_size = ReadInt32(data[56:60])
+	stg.mini_stream_cutoff_size = int32(ReadUInt32(data[56:60]))
 	stg.first_Mini_FAT_sector_location = ReadInt32(data[60:64])
-	stg.number_of_Mini_FAT_sectors = ReadInt32(data[64:68])
+	stg.number_of_Mini_FAT_sectors = ReadUInt32(data[64:68])
 	stg.first_DIFAT_sector_location = ReadInt32(data[68:72])
-	stg.number_of_DIFAT_sectors = ReadInt32(data[72:76])
+	stg.number_of_DIFAT_sectors = ReadUInt32(data[72:76])
 
 	stg.DIFAT = ReadInt32Array(data[76:512], 109)
 
@@ -1803,20 +1871,21 @@ func GetCMMS(filename string) CMMS {
 	var data []byte
 	var ret CMMS
 
-	stg := StgOpenStorage(filename)
-	if stg != nil {
+	file, _ := os.Open("test/1Cv7.MD")
+	defer file.Close()
+	doc, err := mscfb.New(file)
+	if err != nil {
+		return ret
+	}
 
-		var i int
-
-		metadata := stg.OpenStorage("Metadata")
-		if metadata != nil {
-			//fmt.Print("!")
-			stream := metadata.OpenStream("Main MetaData Stream")
-			lSize := stream.GetSize()
-			//fmt.Printf("lSize=%d\n", lSize)
-
-			btStream := make([]byte, lSize)
-			btStream = stream.Read(btStream, lSize)
+	for entry, err := doc.Next(); err == nil; entry, err = doc.Next() {
+		if entry.Name == "Main MetaData Stream" {
+			btStream := make([]byte, entry.Size)
+			_, er := entry.Read(btStream)
+			if er != nil {
+				log.Fatal(err)
+			}
+			i := 0
 			for i = 0; i < len(btStream); i++ {
 				if btStream[i] == '{' {
 					break
@@ -1825,7 +1894,6 @@ func GetCMMS(filename string) CMMS {
 			if (i > 0) && (i < len(btStream)) {
 				btStream = btStream[i:]
 			}
-			//fmt.Printf("sz=%d\n", len(btStream))
 
 			decoder := charmap.Windows1251.NewDecoder()
 			buf := bytes.NewBuffer([]byte{})
@@ -1837,7 +1905,6 @@ func GetCMMS(filename string) CMMS {
 				panic(err)
 			}
 			sss := string(b)
-			//fmt.Printf("sz=%d\n", len(sss))
 
 			file, _err := os.Create(filename + ".MDP")
 			if _err != nil {
@@ -1866,7 +1933,71 @@ func GetCMMS(filename string) CMMS {
 			ret = *c
 		}
 	}
+	/*
+		stg := StgOpenStorage(filename)
+		if stg != nil {
 
+			var i int
+
+			metadata := stg.OpenStorage("Metadata")
+			if metadata != nil {
+				//fmt.Print("!")
+				stream := metadata.OpenStream("Main MetaData Stream")
+				lSize := stream.GetSize()
+				//fmt.Printf("lSize=%d\n", lSize)
+
+				btStream := make([]byte, lSize)
+				btStream = stream.Read(btStream, lSize)
+				for i = 0; i < len(btStream); i++ {
+					if btStream[i] == '{' {
+						break
+					}
+				}
+				if (i > 0) && (i < len(btStream)) {
+					btStream = btStream[i:]
+				}
+				//fmt.Printf("sz=%d\n", len(btStream))
+
+				decoder := charmap.Windows1251.NewDecoder()
+				buf := bytes.NewBuffer([]byte{})
+				buf.Write(btStream)
+
+				reader := decoder.Reader(buf)
+				b, err := ioutil.ReadAll(reader)
+				if err != nil {
+					panic(err)
+				}
+				sss := string(b)
+				//fmt.Printf("sz=%d\n", len(sss))
+
+				file, _err := os.Create(filename + ".MDP")
+				if _err != nil {
+					fmt.Println("Unable to create file:", _err)
+					os.Exit(1)
+				}
+				defer file.Close()
+				file.WriteString(sss)
+				//file.Write(btStream)
+
+				lex := *NewLexer(sss)
+
+				c := NewCMMS("root")
+				c.ParseMetaData(lex)
+				//c.PrintLog(0)
+				data, err = json.Marshal(c)
+				//FileMDP := t.fileMetadata + ".cache"
+				file, _err = os.Create(filename + ".cache")
+				if _err != nil {
+					fmt.Println("Unable to create file:", err)
+					os.Exit(1)
+				}
+				defer file.Close()
+				file.Write(data)
+
+				ret = *c
+			}
+		}
+	*/
 	return ret
 }
 
@@ -4538,11 +4669,11 @@ func NewODBCRecordset() ODBCRecordset {
 
 func (t *ODBCRecordset) Connection(connString string) error {
 
-//	t.db, t.err = sql.Open("sqlserver", connString)
-//	if t.err != nil {
-//		//log.Fatal("Error creating connection pool: ", err.Error())
-//		return t.err
-//	}
+	//	t.db, t.err = sql.Open("sqlserver", connString)
+	//	if t.err != nil {
+	//		//log.Fatal("Error creating connection pool: ", err.Error())
+	//		return t.err
+	//	}
 	connector, err := mssql.NewConnector(connString)
 	if err != nil {
 		return err
