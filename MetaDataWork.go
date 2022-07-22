@@ -1871,7 +1871,8 @@ func GetCMMS(filename string) CMMS {
 	var data []byte
 	var ret CMMS
 
-	file, _ := os.Open("test/1Cv7.MD")
+//	file, _ := os.Open("test/1Cv7.MD")
+	file, _ := os.Open(filename)
 	defer file.Close()
 	doc, err := mscfb.New(file)
 	if err != nil {
