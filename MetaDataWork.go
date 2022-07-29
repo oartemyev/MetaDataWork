@@ -4783,6 +4783,17 @@ func (t *ODBCRecordset) Close() error {
 	return t.err
 }
 
+func (t *ODBCRecordset) BeginTx() (*sql.Tx,error) {
+
+    opts := &sql.TxOptions{
+		Isolation: sql.LevelSerializable,
+	}
+
+    txn, err := t.conn.BeginTx(t.ctx, opts)
+
+    return txn, err
+}
+
 func (t *ODBCRecordset) Execucte(q string) error {
 	var err error
 	q, err = t.MetaDataWork.ParseQuery(q)
