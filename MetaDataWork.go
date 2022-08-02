@@ -4949,7 +4949,12 @@ func (t ODBCRecordset) ToJson() ([]byte, error) {
 		buffer.WriteString("},\n")
 	}
 	str := string(buffer.Bytes())
-	str0 := "[" + str[0:len(str)-2] + "\n]"
+	str0 := "["
+	if len(str) >= 2 {
+		str0 += str[0:len(str)-2] + "\n"
+
+	}
+	str0 += "]"
 	buf = []byte(str0)
 
 	return buf, err
