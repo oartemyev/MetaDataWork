@@ -1871,7 +1871,7 @@ func GetCMMS(filename string) CMMS {
 	var data []byte
 	var ret CMMS
 
-//	file, _ := os.Open("test/1Cv7.MD")
+	//	file, _ := os.Open("test/1Cv7.MD")
 	file, _ := os.Open(filename)
 	defer file.Close()
 	doc, err := mscfb.New(file)
@@ -2640,7 +2640,8 @@ func (t MetaDataWork) ParsingAttributesDocument(FirstPart string, TwoPart string
 			strChange = "$" + FirstPart + "." + TwoPart
 		} else {
 			cc := cr.GetDocHeadByName(TwoPart)
-			if cc.TypeObj == int(md_None) {
+			//if cc.TypeObj == int(md_None) {
+			if cc.ID == 0 {
 				ct := cr.GetDocTableByName(TwoPart)
 				if ct.ID == 0 {
 					strChange = "$" + FirstPart + "." + TwoPart
@@ -2666,7 +2667,8 @@ func (t MetaDataWork) ParsingAttributesDocumentTable(FirstPart string, TwoPart s
 		strChange = FirstPart + ".LINENO_"
 	} else {
 		cr := t.GetDocByName(vidData)
-		if cr.TypeObj == int(md_None) {
+		//		if cr.TypeObj == int(md_None) {
+		if cr.ID == 0 {
 			strChange = "$" + FirstPart + "." + TwoPart
 		} else {
 			cc := cr.GetDocTableByName(TwoPart)
@@ -3332,6 +3334,7 @@ func (t *MetaDataWork) PrepareConditionBySliceFirstLast(strCondotion string, Nam
 
 func CreateFunctionIntToTime(db *sql.DB) error {
 	var rows *sql.Rows
+
 	ctx := context.Background()
 	err := db.PingContext(ctx)
 	if err != nil {
@@ -4783,15 +4786,15 @@ func (t *ODBCRecordset) Close() error {
 	return t.err
 }
 
-func (t *ODBCRecordset) BeginTx() (*sql.Tx,error) {
+func (t *ODBCRecordset) BeginTx() (*sql.Tx, error) {
 
-    opts := &sql.TxOptions{
+	opts := &sql.TxOptions{
 		Isolation: sql.LevelSerializable,
 	}
 
-    txn, err := t.conn.BeginTx(t.ctx, opts)
+	txn, err := t.conn.BeginTx(t.ctx, opts)
 
-    return txn, err
+	return txn, err
 }
 
 func (t *ODBCRecordset) Execucte(q string) error {
@@ -4825,7 +4828,8 @@ func (t *ODBCRecordset) Exec(q string) error {
 	if t.err != nil {
 		return t.err
 	}
-	t.rows, t.err = t.db.QueryContext(t.ctx, q)
+	//	t.rows, t.err = t.db.QueryContext(t.ctx, q)
+	t.rows, t.err = t.conn.QueryContext(t.ctx, q)
 	if t.err != nil {
 
 		fmt.Println(q)
@@ -4888,37 +4892,65 @@ func (t ODBCRecordset) GetRows() ([]RowAbstract, error) {
 }
 
 func (t ODBCRecordset) ToJson() ([]byte, error) {
-	//masterData := make(map[string][]interface{})
-	masterData := []rowAbstract{}
 	var buf []byte
 	var err error
 
-	for t.rows.Next() {
-		err = t.rows.Scan(t.vals...)
-		if err != nil {
-			return nil, err
-		}
-		//result := make(map[string]interface{}, len(t.cols))
-		result := make(rowAbstract, len(t.cols))
-		for i, v := range t.vals {
+	//	results := []map[string]string{}
+	//var results []byte
+	cols, _ := t.rows.Columns()
+	lenCols := len(cols)
 
-			//masterData[t.cols[i]] = append(masterData[t.cols[i]], v[0])
-			result[t.cols[i]] = v
+	rawResult := make([]interface{}, lenCols)
 
-			// x := v.([]byte)
-			// if nx, ok := strconv.ParseFloat(string(x), 64); ok == nil {
-			//     masterData[t.cols[i]] = append(masterData[t.cols[i]], nx)
-			// } else if b, ok := strconv.ParseBool(string(x)); ok == nil {
-			//     masterData[t.cols[i]] = append(masterData[t.cols[i]], b)
-			// } else if "string" == fmt.Sprintf("%T", string(x)) {
-			//     masterData[t.cols[i]] = append(masterData[t.cols[i]], string(x))
-			// } else {
-			//     fmt.Printf("Failed on if for type %T of %v\n", x, x)
-			// }
-		}
-		masterData = append(masterData, result)
+	dest := make([]interface{}, lenCols) // A temporary any slice
+	for i := range rawResult {
+		dest[i] = &rawResult[i] // Put pointers to each string in the interface slice
 	}
-	buf, err = json.Marshal(masterData)
+
+	buffer := new(bytes.Buffer)
+
+	for t.rows.Next() {
+		//result := make(map[string]interface{}, lenCols)
+		t.rows.Scan(dest...)
+		buffer.WriteString("{\n")
+		for i, raw := range rawResult {
+			if raw == nil {
+				//result[cols[i]] = ""
+				buffer.WriteString(fmt.Sprintf(`"%s": ""`, cols[i]))
+				if i < (lenCols - 1) {
+					buffer.WriteString(",")
+				}
+				buffer.WriteString("\n")
+			} else {
+				//				result[cols[i]] = string(raw)
+				//result[cols[i]] = raw
+				switch t := raw.(type) {
+				case int64:
+					buffer.WriteString(fmt.Sprintf(`"%s": %d`, cols[i], t))
+				case int32:
+					buffer.WriteString(fmt.Sprintf(`"%s": %d`, cols[i], t))
+				case int16:
+					buffer.WriteString(fmt.Sprintf(`"%s": %d`, cols[i], t))
+				case float64:
+					buffer.WriteString(fmt.Sprintf(`"%s": %f`, cols[i], t))
+				case float32:
+					buffer.WriteString(fmt.Sprintf(`"%s": %f`, cols[i], t))
+				case time.Time:
+					buffer.WriteString(fmt.Sprintf(`"%s": %s`, cols[i], fmt.Sprintf(`"%s"`, t.Format("2006-01-02 15:04:05"))))
+				case string:
+					buffer.WriteString(fmt.Sprintf(`"%s": "%s"`, cols[i], t))
+				}
+				if i < (lenCols - 1) {
+					buffer.WriteString(",")
+				}
+				buffer.WriteString("\n")
+			}
+		}
+		buffer.WriteString("},\n")
+	}
+	str := string(buffer.Bytes())
+	str0 := "[" + str[0:len(str)-2] + "\n]"
+	buf = []byte(str0)
 
 	return buf, err
 }
