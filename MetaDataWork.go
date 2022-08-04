@@ -10,6 +10,7 @@ import (
 	"math"
 	"os"
 	"path/filepath"
+	"reflect"
 	"regexp"
 	"strconv"
 	"strings"
@@ -4656,6 +4657,8 @@ type ODBCRecordset struct {
 	rows *sql.Rows
 	conn *sql.Conn
 
+	result sql.Result
+
 	ctx context.Context
 
 	cols []string
@@ -4803,9 +4806,18 @@ func (t *ODBCRecordset) Execucte(q string) error {
 	if err != nil {
 		return err
 	}
-	_, t.err = t.conn.ExecContext(t.ctx, q)
+	t.result, t.err = t.conn.ExecContext(t.ctx, q)
 
 	return t.err
+}
+
+func (t *ODBCRecordset) RowsAffected() int64 {
+	m, err := t.result.RowsAffected()
+	if err != nil {
+		return -1
+	}
+
+	return m
 }
 
 func (t *ODBCRecordset) Exec(q string) error {
@@ -4890,6 +4902,28 @@ func (t ODBCRecordset) GetRows() ([]RowAbstract, error) {
 
 	return masterData, err
 }
+func (t ODBCRecordset) NextResultSet() bool {
+
+	b := t.rows.NextResultSet()
+	if b {
+
+		t.cols, t.err = t.rows.Columns()
+		if t.err != nil {
+			return false
+		}
+
+		if t.cols == nil {
+			return false
+		}
+		t.vals = make([]interface{}, len(t.cols))
+		for i := 0; i < len(t.cols); i++ {
+			t.vals[i] = new(interface{})
+		}
+
+	}
+
+	return b
+}
 
 func (t ODBCRecordset) ToJson() ([]byte, error) {
 	var buf []byte
@@ -4932,6 +4966,17 @@ func (t ODBCRecordset) ToJson() ([]byte, error) {
 				case int16:
 					buffer.WriteString(fmt.Sprintf(`"%s": %d`, cols[i], t))
 				case float64:
+
+					var buf [8]byte
+					n := math.Float64bits(t)
+					buf[0] = byte(n >> 56)
+					buf[1] = byte(n >> 48)
+					buf[2] = byte(n >> 40)
+					buf[3] = byte(n >> 32)
+					buf[4] = byte(n >> 24)
+					buf[5] = byte(n >> 16)
+					buf[6] = byte(n >> 8)
+					buf[7] = byte(n)
 					buffer.WriteString(fmt.Sprintf(`"%s": %f`, cols[i], t))
 				case float32:
 					buffer.WriteString(fmt.Sprintf(`"%s": %f`, cols[i], t))
@@ -4939,6 +4984,27 @@ func (t ODBCRecordset) ToJson() ([]byte, error) {
 					buffer.WriteString(fmt.Sprintf(`"%s": %s`, cols[i], fmt.Sprintf(`"%s"`, t.Format("2006-01-02 15:04:05"))))
 				case string:
 					buffer.WriteString(fmt.Sprintf(`"%s": "%s"`, cols[i], t))
+				case []uint8:
+					/*
+						var b []byte = make([]byte, 8)
+						bytes := []byte(t)
+						for i := 0; i < len(bytes); i++ {
+							b[i] = bytes[i]
+						}
+						bits := binary.LittleEndian.Uint64(b)
+						float := math.Float64frombits(bits)
+					*/
+					var b []byte = make([]byte, 8)
+					k := 0
+					for i := len(t) - 1; i >= 0; i-- {
+						b[k] = t[i]
+						k++
+					}
+					bits := binary.LittleEndian.Uint64(b)
+					float := math.Float64frombits(bits)
+					buffer.WriteString(fmt.Sprintf(`"%s": %f.%d`, cols[i], float, t[4]))
+				default:
+					log.Println(raw, reflect.TypeOf(raw))
 				}
 				if i < (lenCols - 1) {
 					buffer.WriteString(",")
