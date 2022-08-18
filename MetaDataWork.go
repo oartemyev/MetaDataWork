@@ -4859,9 +4859,9 @@ func (t *ODBCRecordset) Exec(q string) error {
 		return nil
 	}
 	t.vals = make([]interface{}, len(t.cols))
-	for i := 0; i < len(t.cols); i++ {
-		t.vals[i] = new(interface{})
-	}
+	// for i := 0; i < len(t.cols); i++ {
+	// 	t.vals[i] = new(interface{})
+	// }
 
 	return t.err
 }
@@ -4873,18 +4873,26 @@ func (t ODBCRecordset) GetRows() ([]RowAbstract, error) {
 	//masterData := make(map[string][]interface{})
 	masterData := []RowAbstract{}
 	var err error
+	cols, _ := t.rows.Columns()
+	lenCols := len(cols)
+	rawResult := make([]interface{}, lenCols)
+	dest := make([]interface{}, lenCols) // A temporary any slice
+	for i := range t.vals {
+		dest[i] = &rawResult[i] // Put pointers to each string in the interface slice
+	}
 
 	for t.rows.Next() {
-		err = t.rows.Scan(t.vals...)
+		err = t.rows.Scan(dest...)
 		if err != nil {
 			return nil, err
 		}
 		//result := make(map[string]interface{}, len(t.cols))
 		result := make(RowAbstract, len(t.cols))
-		for i, v := range t.vals {
+		for i, raw := range rawResult {
+			//for i, v := range t.vals {
 
 			//masterData[t.cols[i]] = append(masterData[t.cols[i]], v[0])
-			result[t.cols[i]] = v
+			result[t.cols[i]] = raw
 
 			// x := v.([]byte)
 			// if nx, ok := strconv.ParseFloat(string(x), 64); ok == nil {
@@ -4916,9 +4924,9 @@ func (t ODBCRecordset) NextResultSet() bool {
 			return false
 		}
 		t.vals = make([]interface{}, len(t.cols))
-		for i := 0; i < len(t.cols); i++ {
-			t.vals[i] = new(interface{})
-		}
+		// for i := 0; i < len(t.cols); i++ {
+		// 	t.vals[i] = new(interface{})
+		// }
 
 	}
 
@@ -5033,7 +5041,20 @@ func (t ODBCRecordset) GetCols() []string {
 func (t *ODBCRecordset) Next() (bool, error) {
 	r := t.rows.Next()
 	if r {
-		t.err = t.rows.Scan(t.vals...)
+		cols, _ := t.rows.Columns()
+		lenCols := len(cols)
+
+		rawResult := make([]interface{}, lenCols)
+
+		dest := make([]interface{}, lenCols) // A temporary any slice
+		for i := range rawResult {
+			dest[i] = &rawResult[i] // Put pointers to each string in the interface slice
+		}
+		t.rows.Scan(dest...)
+		for i, raw := range rawResult {
+			t.vals[i] = raw
+		}
+		//t.err = t.rows.Scan(t.vals...)
 	}
 	if t.rows.Err() != nil {
 		return r, t.rows.Err()
@@ -5051,10 +5072,11 @@ func (t ODBCRecordset) GetValueByName(name string) (interface{}, error) {
 	for i = 0; i < len(t.cols); i++ {
 		//t.vals[i] = new(interface{})
 		if strings.ToUpper(t.cols[i]) == strings.ToUpper(name) {
-			//v = t.vals[i]
-			_pval := t.vals[i]
-			pval := _pval.(*interface{})
-			return (*pval), nil
+			// //v = t.vals[i]
+			// _pval := t.vals[i]
+			// pval := _pval.(*interface{})
+			// return (*pval), nil
+			return t.vals[i], nil
 			//	break
 		}
 	}
@@ -5067,7 +5089,7 @@ func (t ODBCRecordset) GetValueByName(name string) (interface{}, error) {
 }
 
 func (t ODBCRecordset) GetStringByName(name string) (string, error) {
-	var _pval interface{}
+	//var _pval interface{}
 	var err error
 	var i int
 
@@ -5077,9 +5099,9 @@ func (t ODBCRecordset) GetStringByName(name string) (string, error) {
 	for i = 0; i < len(t.cols); i++ {
 		//t.vals[i] = new(interface{})
 		if strings.ToUpper(t.cols[i]) == strings.ToUpper(name) {
-			_pval = t.vals[i]
-			pval := _pval.(*interface{})
-			switch v := (*pval).(type) {
+			//_pval = t.vals[i]
+			//pval := _pval.(*interface{})
+			switch v := t.vals[i].(type) {
 			case nil:
 				s = "NULL"
 			case bool:
