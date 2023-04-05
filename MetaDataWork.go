@@ -4957,6 +4957,7 @@ func (t ODBCRecordset) ToJson() ([]byte, error) {
 		buffer.WriteString("{\n")
 		for i, raw := range rawResult {
 			if raw == nil {
+				continue
 				//result[cols[i]] = ""
 				buffer.WriteString(fmt.Sprintf(`"%s": ""`, cols[i]))
 				if i < (lenCols - 1) {
@@ -4991,7 +4992,18 @@ func (t ODBCRecordset) ToJson() ([]byte, error) {
 				case time.Time:
 					buffer.WriteString(fmt.Sprintf(`"%s": %s`, cols[i], fmt.Sprintf(`"%s"`, t.Format("2006-01-02 15:04:05"))))
 				case string:
-					buffer.WriteString(fmt.Sprintf(`"%s": "%s"`, cols[i], t))
+					// t = strings.Replace(t, `"`, `""`, -1)
+					// t = strings.Replace(t, "\n", "\\n", -1)
+					// t = strings.Replace(t, "\t", "\\t", -1)
+					//t = strings.Replace(t, "\\\\", "\\", -1)
+					b, _ := json.Marshal(t)
+					buffer.WriteString(fmt.Sprintf(`"%s": %s`, cols[i], string(b)))
+				case bool:
+					if t {
+						buffer.WriteString(fmt.Sprintf(`"%s": true`, cols[i]))
+					} else {
+						buffer.WriteString(fmt.Sprintf(`"%s": false`, cols[i]))
+					}
 				case []uint8:
 					/*
 						var b []byte = make([]byte, 8)
