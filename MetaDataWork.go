@@ -36,7 +36,7 @@ import (
 
 //=======================  НАЧАЛО КЛАССА Storage ===========================================
 
-// DirectoryEntryTypes
+//DirectoryEntryTypes
 const (
 	UNKNOWN      = 0
 	STORAGE      = 1
@@ -44,15 +44,13 @@ const (
 	ROOT_STORAGE = 5
 )
 
-// SectorNumbers
+//SectorNumbers
 // const uint32 (
-//
-//	FREESECT     = -1
-//	END_OF_CHAIN = -2
-//	FATSECT      = -3
-//	DIFSECT      = -2
-//	MAX_SEC_NUM  = -6
-//
+// 	FREESECT     = -1
+// 	END_OF_CHAIN = -2
+// 	FATSECT      = -3
+// 	DIFSECT      = -2
+// 	MAX_SEC_NUM  = -6
 // )
 var FREESECT uint32 = 4294967295     // 0xFFFFFFFF
 var END_OF_CHAIN uint32 = 4294967294 // 0xFFFFFFFE
@@ -76,8 +74,8 @@ type DirectoryEntry struct {
 	stream_size                                 int64
 }
 
-// var minor_version, major_version int16
-// var bom, sector_shift_exp, mini_sector_shift_exp int16
+//var minor_version, major_version int16
+//var bom, sector_shift_exp, mini_sector_shift_exp int16
 var sector_size, mini_sector_size int16
 var binary_data []byte
 
@@ -90,7 +88,7 @@ var DIFAT []int32
 var FAT []int32
 var FAT_sectors []int32
 
-// var miniFAT []int32
+//var miniFAT []int32
 var max_sector_index uint32
 
 //var directory_entries []DirectoryEntry
@@ -149,9 +147,9 @@ func DirectoryEntryTypes(i int) string {
 	return "ERROR ENTRY TYPE " + IntToString(i)
 }
 
-//	func is_valid(sec_num int32) bool {
-//		return uint32(sec_num) < MAX_SEC_NUM
-//	}
+// func is_valid(sec_num int32) bool {
+// 	return uint32(sec_num) < MAX_SEC_NUM
+// }
 func DecodeUTF16(b []byte) string {
 	utf := make([]uint16, (len(b)+(2-1))/2)
 	o := binary.BigEndian //binary.LittleEndian
@@ -671,7 +669,7 @@ func (t *Stream) Read(c []byte, lSize int32) []byte {
 
 //=======================  КОНЕЦ КЛАССА Storage ===========================================
 
-// =======================  НАЧАЛО MetaDataWork ===========================================
+//=======================  НАЧАЛО MetaDataWork ===========================================
 type TTokenType int
 
 const (
@@ -1091,12 +1089,12 @@ type DocSelRefObj struct {
 }
 
 /*
-	func (t *DocSelRefObj) GetType() string {
-		s := ""
-		fmt.Sprintf(s, "%T", t)
+func (t *DocSelRefObj) GetType() string {
+	s := ""
+	fmt.Sprintf(s, "%T", t)
 
-		return s
-	}
+	return s
+}
 */
 func (t *DocSelRefObj) _Dummy() {}
 
@@ -1147,12 +1145,12 @@ func IntToString(i int) string {
 }
 
 /*
-	func (t *FormMD) GetType() string {
-		s := ""
-		fmt.Sprintf(s, "%T", t)
+func (t *FormMD) GetType() string {
+	s := ""
+	fmt.Sprintf(s, "%T", t)
 
-		return s
-	}
+	return s
+}
 */
 func (t *FormMD) _Dummy() {}
 
@@ -1186,12 +1184,12 @@ type CommonProp struct {
 }
 
 /*
-	func (t *CommonProp) GetType() string {
-		s := ""
-		fmt.Sprintf(s,"%T", t)
+func (t *CommonProp) GetType() string {
+	s := ""
+	fmt.Sprintf(s,"%T", t)
 
-		return s
-	}
+	return s
+}
 */
 func (t *CommonProp) _Dummy() {}
 
@@ -2397,7 +2395,7 @@ func (t MetaDataWork) SelectVariable(v string) string {
 	return v
 }
 
-// func (t MetaDataWork) LongToCharID36(ID int64, val string, Len int) string {
+//func (t MetaDataWork) LongToCharID36(ID int64, val string, Len int) string {
 func (t MetaDataWork) LongToCharID36(ID int64, Len int) string {
 
 	Buffer := ""
@@ -3031,7 +3029,7 @@ func (t MetaDataWork) GetEndOfPeriod(Date time.Time) time.Time {
 	return dt
 }
 
-// ПодготовитьУсловиеПоРегистрам
+//ПодготовитьУсловиеПоРегистрам
 func (t MetaDataWork) PrepareConditionRegistr(condition string, RegistID string, nameTable string) string {
 	if condition[len(condition)-1] == ',' {
 		condition = condition[:len(condition)-1]
@@ -3068,7 +3066,7 @@ func (t MetaDataWork) PrepareConditionRegistr(condition string, RegistID string,
 	return txtQuery
 }
 
-// Остатки_РегистрОстатки_SQL
+//Остатки_РегистрОстатки_SQL
 func (t MetaDataWork) RegistrRests(res []string) string {
 	txtQuery := ""
 	RegistID := res[1]
@@ -3285,7 +3283,7 @@ func (t MetaDataWork) RegistrRests(res []string) string {
 	return "(\n" + txtQuery + "\n)"
 }
 
-// ПарсингВТРегистрОстатки
+//ПарсингВТРегистрОстатки
 func (t MetaDataWork) ParsingVTRegisterBalances(v string) string {
 	Param := t.GetStringParam(5)
 	Pattern := `\$РегистрОстатки\.([\wа-яё]+[^\wа-яё\(]*)\(` + Param
@@ -3317,7 +3315,7 @@ func PrepareString(s string) string {
 	return strings.Trim(s, " ")
 }
 
-// ПодготовитьУсловиеПоСрезПервыхПоследних
+//ПодготовитьУсловиеПоСрезПервыхПоследних
 func (t *MetaDataWork) PrepareConditionBySliceFirstLast(strCondotion string, NameTable string) string {
 	txtQuery := PrepareString(strCondotion)
 	Pattern := `'[^']*'|\$?[\wа-я]+\.[\wа-я]+|[:@\$]?[\wа-я]+|[^:@\$\wа-я']+`
@@ -3410,7 +3408,7 @@ func CreateFunctionStrToId(db *sql.DB) error {
 	return nil
 }
 
-// СрезПоследних_DBF_SQL
+//СрезПоследних_DBF_SQL
 func (t *MetaDataWork) SliceLast_DBF_SQL(res []string) string {
 	txtQuery := ""
 
@@ -3628,7 +3626,7 @@ func (t *MetaDataWork) SliceLast_DBF_SQL(res []string) string {
 	return txtQuery
 }
 
-// СрезПервых_DBF_SQL
+//СрезПервых_DBF_SQL
 func (t *MetaDataWork) SliceFirst_DBF_SQL(res []string) string {
 	txtQuery := ""
 
@@ -3845,7 +3843,7 @@ func (t *MetaDataWork) SliceFirst_DBF_SQL(res []string) string {
 	return txtQuery
 }
 
-// История_DBF_SQL
+//История_DBF_SQL
 func (t *MetaDataWork) History_DBF_SQL(res []string) string {
 	txtQuery := ""
 
@@ -3981,7 +3979,7 @@ func (t *MetaDataWork) History_DBF_SQL(res []string) string {
 	return txtQuery
 }
 
-// ПарсингВТСрезПоследних
+//ПарсингВТСрезПоследних
 func (t *MetaDataWork) ParsingVTSliceLatest(v string) string {
 	Param := t.GetStringParam(5)
 	Pattern := `\$СрезПоследних\.([\wа-яё]+[^\wа-яё\(]*)\(` + Param
@@ -4001,7 +3999,7 @@ func (t *MetaDataWork) ParsingVTSliceLatest(v string) string {
 
 }
 
-// ПарсингВТСрезПервых
+//ПарсингВТСрезПервых
 func (t *MetaDataWork) ParsingVTScutFirst(v string) string {
 	Param := t.GetStringParam(5)
 	Pattern := `\$СрезПервых\.([\wа-яё]+[^\wа-яё\(]*)\(` + Param
@@ -4021,7 +4019,7 @@ func (t *MetaDataWork) ParsingVTScutFirst(v string) string {
 
 }
 
-// ПарсингВТИстория
+//ПарсингВТИстория
 func (t *MetaDataWork) ParsingVTIhistory(v string) string {
 	Param := t.GetStringParam(5)
 	Pattern := `\$История\.([\wа-яё]+[^\wа-яё\(]*)\(` + Param
@@ -4959,13 +4957,13 @@ func (t ODBCRecordset) ToJson() ([]byte, error) {
 		buffer.WriteString("{\n")
 		for i, raw := range rawResult {
 			if raw == nil {
-				// //result[cols[i]] = ""
-				// buffer.WriteString(fmt.Sprintf(`"%s": ""`, cols[i]))
-				// if i < (lenCols - 1) {
-				// 	buffer.WriteString(",")
-				// }
-				// buffer.WriteString("\n")
 				continue
+				//result[cols[i]] = ""
+				buffer.WriteString(fmt.Sprintf(`"%s": ""`, cols[i]))
+				if i < (lenCols - 1) {
+					buffer.WriteString(",")
+				}
+				buffer.WriteString("\n")
 			} else {
 				//				result[cols[i]] = string(raw)
 				//result[cols[i]] = raw
@@ -4994,7 +4992,18 @@ func (t ODBCRecordset) ToJson() ([]byte, error) {
 				case time.Time:
 					buffer.WriteString(fmt.Sprintf(`"%s": %s`, cols[i], fmt.Sprintf(`"%s"`, t.Format("2006-01-02 15:04:05"))))
 				case string:
-					buffer.WriteString(fmt.Sprintf(`"%s": "%s"`, cols[i], t))
+					// t = strings.Replace(t, `"`, `""`, -1)
+					// t = strings.Replace(t, "\n", "\\n", -1)
+					// t = strings.Replace(t, "\t", "\\t", -1)
+					//t = strings.Replace(t, "\\\\", "\\", -1)
+					b, _ := json.Marshal(t)
+					buffer.WriteString(fmt.Sprintf(`"%s": %s`, cols[i], string(b)))
+				case bool:
+					if t {
+						buffer.WriteString(fmt.Sprintf(`"%s": true`, cols[i]))
+					} else {
+						buffer.WriteString(fmt.Sprintf(`"%s": false`, cols[i]))
+					}
 				case []uint8:
 					/*
 						var b []byte = make([]byte, 8)
