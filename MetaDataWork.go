@@ -4800,7 +4800,7 @@ func (t *ODBCRecordset) BeginTx() (*sql.Tx, error) {
 	return txn, err
 }
 
-func (t *ODBCRecordset) Execucte(q string) error {
+func (t *ODBCRecordset) Execute(q string) error {
 	var err error
 	q, err = t.MetaDataWork.ParseQuery(q)
 	if err != nil {
