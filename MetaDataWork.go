@@ -5023,12 +5023,12 @@ func (t ODBCRecordset) ToJson() ([]byte, error) {
 					bits := binary.LittleEndian.Uint64(b)
 					float := math.Float64frombits(bits)
 					buffer.WriteString(fmt.Sprintf(`"%s": %f.%d`, cols[i], float, t[4]))
-				case bool:
-					if t {
-						buffer.WriteString(fmt.Sprintf(`"%s": true`, cols[i]))
-					} else {
-						buffer.WriteString(fmt.Sprintf(`"%s": false`, cols[i]))
-					}
+//				case bool:
+//					if t {
+//						buffer.WriteString(fmt.Sprintf(`"%s": true`, cols[i]))
+//					} else {
+//						buffer.WriteString(fmt.Sprintf(`"%s": false`, cols[i]))
+//					}
 				default:
 					log.Println(raw, reflect.TypeOf(raw))
 				}
