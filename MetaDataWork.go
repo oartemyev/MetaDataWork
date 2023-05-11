@@ -2899,7 +2899,7 @@ func (t MetaDataWork) ParseParameters(v string) string {
 						strValue = fmt.Sprintf("{d '%04d-%02d-%02d'}", obj.Year(), obj.Month(), obj.Day())
 					}
 				case string:
-					strValue = "'" + obj + "'"
+					strValue = "'" + strings.ReplaceAll(obj,"'", "''") + "'"
 				case int, int16, int32, int64:
 					strValue = fmt.Sprintf("%d", obj)
 				case uint, uint16, uint32, uint64:
