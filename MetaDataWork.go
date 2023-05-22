@@ -2899,7 +2899,7 @@ func (t MetaDataWork) ParseParameters(v string) string {
 						strValue = fmt.Sprintf("{d '%04d-%02d-%02d'}", obj.Year(), obj.Month(), obj.Day())
 					}
 				case string:
-					strValue = "'" + strings.ReplaceAll(obj,"'", "''") + "'"
+					strValue = "'" + strings.ReplaceAll(obj, "'", "''") + "'"
 				case int, int16, int32, int64:
 					strValue = fmt.Sprintf("%d", obj)
 				case uint, uint16, uint32, uint64:
@@ -5014,21 +5014,27 @@ func (t ODBCRecordset) ToJson() ([]byte, error) {
 						bits := binary.LittleEndian.Uint64(b)
 						float := math.Float64frombits(bits)
 					*/
-					var b []byte = make([]byte, 8)
-					k := 0
-					for i := len(t) - 1; i >= 0; i-- {
-						b[k] = t[i]
-						k++
-					}
-					bits := binary.LittleEndian.Uint64(b)
-					float := math.Float64frombits(bits)
-					buffer.WriteString(fmt.Sprintf(`"%s": %f.%d`, cols[i], float, t[4]))
-//				case bool:
-//					if t {
-//						buffer.WriteString(fmt.Sprintf(`"%s": true`, cols[i]))
-//					} else {
-//						buffer.WriteString(fmt.Sprintf(`"%s": false`, cols[i]))
-//					}
+
+					//fmt.Println(string(t))
+					//fmt.Printf("%d %s\n", len(t), string(t))
+
+					// var b []byte = make([]byte, 8)
+					// k := 0
+					// for i := len(t) - 1; i >= 0; i-- {
+					// 	b[k] = t[i]
+					// 	k++
+					// }
+					// bits := binary.LittleEndian.Uint64(b)
+					// float := math.Float64frombits(bits)
+					//float, err := strconv.ParseFloat(string(t))
+					//buffer.WriteString(fmt.Sprintf(`"%s": %f.%d`, cols[i], float, t[4]))
+					buffer.WriteString(fmt.Sprintf(`"%s": %s`, cols[i], string(t)))
+					//				case bool:
+					//					if t {
+					//						buffer.WriteString(fmt.Sprintf(`"%s": true`, cols[i]))
+					//					} else {
+					//						buffer.WriteString(fmt.Sprintf(`"%s": false`, cols[i]))
+					//					}
 				default:
 					log.Println(raw, reflect.TypeOf(raw))
 				}
@@ -5038,6 +5044,12 @@ func (t ODBCRecordset) ToJson() ([]byte, error) {
 				buffer.WriteString("\n")
 			}
 		}
+		str := strings.Trim(string(buffer.Bytes()), " \n")
+		if string(str[len(str)-1]) == "," {
+			str = str[:len(str)-1] // удаляем последний символ
+		}
+		buffer = new(bytes.Buffer)
+		buffer.WriteString(str)
 		buffer.WriteString("},\n")
 	}
 	str := string(buffer.Bytes())
