@@ -37,6 +37,7 @@ import (
 //=======================  НАЧАЛО КЛАССА Storage ===========================================
 //
 //DirectoryEntryTypes
+//
 const (
 	UNKNOWN      = 0
 	STORAGE      = 1
