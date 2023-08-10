@@ -4,10 +4,6 @@ github.com/denisenkom/go-mssqldb v0.10.0 h1:QykgLZBorFE95+gO3u9esLd0BmbvpWp0/waN
 github.com/denisenkom/go-mssqldb v0.10.0/go.mod h1:xbL0rPBG9cCiLr28tMa8zpbdarY27NDyej4t/EjAShU=
 github.com/golang-sql/civil v0.0.0-20190719163853-cb61b32ac6fe h1:lXe2qZdvpiX5WZkZR4hgp4KJVfY3nMkvmwbVkpv1rVY=
 github.com/golang-sql/civil v0.0.0-20190719163853-cb61b32ac6fe/go.mod h1:8vg3r2VgvsThLBIFL93Qb5yWzgyZWhEmBwUJWevAkK0=
-github.com/oartemyev/ParseDBA v0.0.0-20210723084512-e28e2b9730b3 h1:tbnY1lFtfi45T4uNBO3tFB+b4Bl7TCSuHsWADpj97Ko=
-github.com/oartemyev/ParseDBA v0.0.0-20210723084512-e28e2b9730b3/go.mod h1:9sg2Ona5n8bgr8TQ3ukDRk4nSqV3tMa1adeWRIGcl8U=
-github.com/oartemyev/ParseDBA v0.0.0-20210728103244-488d2b891f11 h1:cQKJmRywN0qmWl7We7NTMmRmEc4fGX/X+Qe+UV0tXdw=
-github.com/oartemyev/ParseDBA v0.0.0-20210728103244-488d2b891f11/go.mod h1:9sg2Ona5n8bgr8TQ3ukDRk4nSqV3tMa1adeWRIGcl8U=
 github.com/oartemyev/ParseDBA v0.0.0-20210824133507-3af91e87932d h1:Nvv+5MdCTJ4MNTXVmWbr7It7OVfB4kjH2HgPedXFiew=
 github.com/oartemyev/ParseDBA v0.0.0-20210824133507-3af91e87932d/go.mod h1:9sg2Ona5n8bgr8TQ3ukDRk4nSqV3tMa1adeWRIGcl8U=
 github.com/pmezard/go-difflib v1.0.0 h1:4DBwDE0NGyQoBHbLQYPwSUPoCMWR5BEzIk/f1lZbAQM=

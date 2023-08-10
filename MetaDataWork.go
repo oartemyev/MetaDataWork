@@ -4,6 +4,7 @@ package MetaDataWork
 import (
 	//	"encoding"
 	"bytes"
+	"encoding"
 	"encoding/binary"
 	"fmt"
 	"io/ioutil"
@@ -13,9 +14,12 @@ import (
 	"path/filepath"
 	"reflect"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
+	"unicode"
 	"unicode/utf16"
 	"unicode/utf8"
 
@@ -4652,6 +4656,573 @@ func (t *MetaDataWork) ParseMD() error {
 
 //=======================  КОНЕЦ MetaDataWork  ===========================================
 
+// A field represents a single field found in a struct.
+type field struct {
+	name      string
+	nameBytes []byte                 // []byte(name)
+	equalFold func(s, t []byte) bool // bytes.EqualFold or equivalent
+
+	nameNonEsc  string // `"` + name + `":`
+	nameEscHTML string // `"` + HTMLEscape(name) + `":`
+
+	tag       bool
+	index     []int
+	typ       reflect.Type
+	omitEmpty bool
+	quoted    bool
+
+	//	encoder encoderFunc
+}
+
+type structFields struct {
+	list      []field
+	nameIndex map[string]int
+}
+
+const (
+	caseMask     = ^byte(0x20) // Mask to ignore case in ASCII.
+	kelvin       = '\u212a'
+	smallLongEss = '\u017f'
+)
+
+func getTypeName(ptr interface{}) string {
+	ptrType := reflect.TypeOf(ptr)
+	arrayType := ptrType.Elem()
+	elementType := arrayType.Elem()
+	typeName := elementType.Name()
+	return typeName
+
+	// objType := reflect.TypeOf(obj)
+
+	// typeName := ""
+	// v := reflect.ValueOf(obj)
+	// if v.Kind() == reflect.Ptr {
+	// 	//objType := reflect.TypeOf(obj)
+	// 	elemType := objType.Elem()
+	// 	typeName = elemType.Name()
+	// } else {
+	// 	typeName = objType.Name()
+	// }
+	// return typeName
+}
+
+// foldFunc returns one of four different case folding equivalence
+// functions, from most general (and slow) to fastest:
+//
+// 1) bytes.EqualFold, if the key s contains any non-ASCII UTF-8
+// 2) equalFoldRight, if s contains special folding ASCII ('k', 'K', 's', 'S')
+// 3) asciiEqualFold, no special, but includes non-letters (including _)
+// 4) simpleLetterEqualFold, no specials, no non-letters.
+//
+// The letters S and K are special because they map to 3 runes, not just 2:
+//  * S maps to s and to U+017F 'Еї' Latin small letter long s
+//  * k maps to K and to U+212A 'в„Є' Kelvin sign
+// See https://play.golang.org/p/tTxjOc0OGo
+//
+// The returned function is specialized for matching against s and
+// should only be given s. It's not curried for performance reasons.
+func foldFunc(s []byte) func(s, t []byte) bool {
+	nonLetter := false
+	special := false // special letter
+	for _, b := range s {
+		if b >= utf8.RuneSelf {
+			return bytes.EqualFold
+		}
+		upper := b & caseMask
+		if upper < 'A' || upper > 'Z' {
+			nonLetter = true
+		} else if upper == 'K' || upper == 'S' {
+			// See above for why these letters are special.
+			special = true
+		}
+	}
+	if special {
+		return equalFoldRight
+	}
+	if nonLetter {
+		return asciiEqualFold
+	}
+	return simpleLetterEqualFold
+}
+
+// equalFoldRight is a specialization of bytes.EqualFold when s is
+// known to be all ASCII (including punctuation), but contains an 's',
+// 'S', 'k', or 'K', requiring a Unicode fold on the bytes in t.
+// See comments on foldFunc.
+func equalFoldRight(s, t []byte) bool {
+	for _, sb := range s {
+		if len(t) == 0 {
+			return false
+		}
+		tb := t[0]
+		if tb < utf8.RuneSelf {
+			if sb != tb {
+				sbUpper := sb & caseMask
+				if 'A' <= sbUpper && sbUpper <= 'Z' {
+					if sbUpper != tb&caseMask {
+						return false
+					}
+				} else {
+					return false
+				}
+			}
+			t = t[1:]
+			continue
+		}
+		// sb is ASCII and t is not. t must be either kelvin
+		// sign or long s; sb must be s, S, k, or K.
+		tr, size := utf8.DecodeRune(t)
+		switch sb {
+		case 's', 'S':
+			if tr != smallLongEss {
+				return false
+			}
+		case 'k', 'K':
+			if tr != kelvin {
+				return false
+			}
+		default:
+			return false
+		}
+		t = t[size:]
+
+	}
+	if len(t) > 0 {
+		return false
+	}
+	return true
+}
+
+// asciiEqualFold is a specialization of bytes.EqualFold for use when
+// s is all ASCII (but may contain non-letters) and contains no
+// special-folding letters.
+// See comments on foldFunc.
+func asciiEqualFold(s, t []byte) bool {
+	if len(s) != len(t) {
+		return false
+	}
+	for i, sb := range s {
+		tb := t[i]
+		if sb == tb {
+			continue
+		}
+		if ('a' <= sb && sb <= 'z') || ('A' <= sb && sb <= 'Z') {
+			if sb&caseMask != tb&caseMask {
+				return false
+			}
+		} else {
+			return false
+		}
+	}
+	return true
+}
+
+// simpleLetterEqualFold is a specialization of bytes.EqualFold for
+// use when s is all ASCII letters (no underscores, etc) and also
+// doesn't contain 'k', 'K', 's', or 'S'.
+// See comments on foldFunc.
+func simpleLetterEqualFold(s, t []byte) bool {
+	if len(s) != len(t) {
+		return false
+	}
+	for i, b := range s {
+		if b&caseMask != t[i]&caseMask {
+			return false
+		}
+	}
+	return true
+}
+
+// tagOptions is the string following a comma in a struct field's "json"
+// tag, or the empty string. It does not include the leading comma.
+type tagOptions string
+
+// parseTag splits a struct field's json tag into its name and
+// comma-separated options.
+func parseTag(tag string) (string, tagOptions) {
+	tag, opt, _ := strings.Cut(tag, ",")
+	return tag, tagOptions(opt)
+}
+
+// Contains reports whether a comma-separated list of options
+// contains a particular substr flag. substr must be surrounded by a
+// string boundary or commas.
+func (o tagOptions) Contains(optionName string) bool {
+	if len(o) == 0 {
+		return false
+	}
+	s := string(o)
+	for s != "" {
+		var name string
+		name, s, _ = strings.Cut(s, ",")
+		if name == optionName {
+			return true
+		}
+	}
+	return false
+}
+
+func isValidTag(s string) bool {
+	if s == "" {
+		return false
+	}
+	for _, c := range s {
+		switch {
+		case strings.ContainsRune("!#$%&()*+-./:;<=>?@[]^_{|}~ ", c):
+			// Backslash and quote chars are reserved, but
+			// otherwise any punctuation chars are allowed
+			// in a tag name.
+		case !unicode.IsLetter(c) && !unicode.IsDigit(c):
+			return false
+		}
+	}
+	return true
+}
+
+var hex = "0123456789abcdef"
+
+// HTMLEscape appends to dst the JSON-encoded src with <, >, &, U+2028 and U+2029
+// characters inside string literals changed to \u003c, \u003e, \u0026, \u2028, \u2029
+// so that the JSON will be safe to embed inside HTML <script> tags.
+// For historical reasons, web browsers don't honor standard HTML
+// escaping within <script> tags, so an alternative JSON encoding must
+// be used.
+func HTMLEscape(dst *bytes.Buffer, src []byte) {
+	// The characters can only appear in string literals,
+	// so just scan the string one byte at a time.
+	start := 0
+	for i, c := range src {
+		if c == '<' || c == '>' || c == '&' {
+			if start < i {
+				dst.Write(src[start:i])
+			}
+			dst.WriteString(`\u00`)
+			dst.WriteByte(hex[c>>4])
+			dst.WriteByte(hex[c&0xF])
+			start = i + 1
+		}
+		// Convert U+2028 and U+2029 (E2 80 A8 and E2 80 A9).
+		if c == 0xE2 && i+2 < len(src) && src[i+1] == 0x80 && src[i+2]&^1 == 0xA8 {
+			if start < i {
+				dst.Write(src[start:i])
+			}
+			dst.WriteString(`\u202`)
+			dst.WriteByte(hex[src[i+2]&0xF])
+			start = i + 3
+		}
+	}
+	if start < len(src) {
+		dst.Write(src[start:])
+	}
+}
+
+// byIndex sorts field by index sequence.
+type byIndex []field
+
+func (x byIndex) Len() int { return len(x) }
+
+func (x byIndex) Swap(i, j int) { x[i], x[j] = x[j], x[i] }
+
+func (x byIndex) Less(i, j int) bool {
+	for k, xik := range x[i].index {
+		if k >= len(x[j].index) {
+			return false
+		}
+		if xik != x[j].index[k] {
+			return xik < x[j].index[k]
+		}
+	}
+	return len(x[i].index) < len(x[j].index)
+}
+
+// typeFields returns a list of fields that JSON should recognize for the given type.
+// The algorithm is breadth-first search over the set of structs to include - the top struct
+// and then any reachable anonymous structs.
+func typeFields(t reflect.Type) structFields {
+	// Anonymous fields to explore at the current level and the next.
+	current := []field{}
+	next := []field{{typ: t}}
+
+	// Count of queued names for current level and the next.
+	var count, nextCount map[reflect.Type]int
+
+	// Types already visited at an earlier level.
+	visited := map[reflect.Type]bool{}
+
+	// Fields found.
+	var fields []field
+
+	// Buffer to run HTMLEscape on field names.
+	var nameEscBuf bytes.Buffer
+
+	for len(next) > 0 {
+		current, next = next, current[:0]
+		count, nextCount = nextCount, map[reflect.Type]int{}
+
+		for _, f := range current {
+			if visited[f.typ] {
+				continue
+			}
+			visited[f.typ] = true
+
+			// Scan f.typ for fields to include.
+			for i := 0; i < f.typ.NumField(); i++ {
+				sf := f.typ.Field(i)
+				if sf.Anonymous {
+					t := sf.Type
+					if t.Kind() == reflect.Pointer {
+						t = t.Elem()
+					}
+					if !sf.IsExported() && t.Kind() != reflect.Struct {
+						// Ignore embedded fields of unexported non-struct types.
+						continue
+					}
+					// Do not ignore embedded fields of unexported struct types
+					// since they may have exported fields.
+				} else if !sf.IsExported() {
+					// Ignore unexported non-embedded fields.
+					continue
+				}
+				tag := sf.Tag.Get("json")
+				if tag == "-" {
+					continue
+				}
+				name, opts := parseTag(tag)
+				if !isValidTag(name) {
+					name = ""
+				}
+				index := make([]int, len(f.index)+1)
+				copy(index, f.index)
+				index[len(f.index)] = i
+
+				ft := sf.Type
+				if ft.Name() == "" && ft.Kind() == reflect.Pointer {
+					// Follow pointer.
+					ft = ft.Elem()
+				}
+
+				// Only strings, floats, integers, and booleans can be quoted.
+				quoted := false
+				if opts.Contains("string") {
+					switch ft.Kind() {
+					case reflect.Bool,
+						reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64,
+						reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uintptr,
+						reflect.Float32, reflect.Float64,
+						reflect.String:
+						quoted = true
+					}
+				}
+
+				// Record found field and index sequence.
+				if name != "" || !sf.Anonymous || ft.Kind() != reflect.Struct {
+					tagged := name != ""
+					if name == "" {
+						name = sf.Name
+					}
+					field := field{
+						name:      name,
+						tag:       tagged,
+						index:     index,
+						typ:       ft,
+						omitEmpty: opts.Contains("omitempty"),
+						quoted:    quoted,
+					}
+					field.nameBytes = []byte(field.name)
+					field.equalFold = foldFunc(field.nameBytes)
+
+					// Build nameEscHTML and nameNonEsc ahead of time.
+					nameEscBuf.Reset()
+					nameEscBuf.WriteString(`"`)
+					HTMLEscape(&nameEscBuf, field.nameBytes)
+					nameEscBuf.WriteString(`":`)
+					field.nameEscHTML = nameEscBuf.String()
+					field.nameNonEsc = `"` + field.name + `":`
+
+					fields = append(fields, field)
+					if count[f.typ] > 1 {
+						// If there were multiple instances, add a second,
+						// so that the annihilation code will see a duplicate.
+						// It only cares about the distinction between 1 or 2,
+						// so don't bother generating any more copies.
+						fields = append(fields, fields[len(fields)-1])
+					}
+					continue
+				}
+
+				// Record new anonymous struct to explore in next round.
+				nextCount[ft]++
+				if nextCount[ft] == 1 {
+					next = append(next, field{name: ft.Name(), index: index, typ: ft})
+				}
+			}
+		}
+	}
+
+	sort.Slice(fields, func(i, j int) bool {
+		x := fields
+		// sort field by name, breaking ties with depth, then
+		// breaking ties with "name came from json tag", then
+		// breaking ties with index sequence.
+		if x[i].name != x[j].name {
+			return x[i].name < x[j].name
+		}
+		if len(x[i].index) != len(x[j].index) {
+			return len(x[i].index) < len(x[j].index)
+		}
+		if x[i].tag != x[j].tag {
+			return x[i].tag
+		}
+		return byIndex(x).Less(i, j)
+	})
+
+	// Delete all fields that are hidden by the Go rules for embedded fields,
+	// except that fields with JSON tags are promoted.
+
+	// The fields are sorted in primary order of name, secondary order
+	// of field index length. Loop over names; for each name, delete
+	// hidden fields by choosing the one dominant field that survives.
+	out := fields[:0]
+	for advance, i := 0, 0; i < len(fields); i += advance {
+		// One iteration per name.
+		// Find the sequence of fields with the name of this first field.
+		fi := fields[i]
+		name := fi.name
+		for advance = 1; i+advance < len(fields); advance++ {
+			fj := fields[i+advance]
+			if fj.name != name {
+				break
+			}
+		}
+		if advance == 1 { // Only one field with this name
+			out = append(out, fi)
+			continue
+		}
+		dominant, ok := dominantField(fields[i : i+advance])
+		if ok {
+			out = append(out, dominant)
+		}
+	}
+
+	fields = out
+	sort.Sort(byIndex(fields))
+
+	// for i := range fields {
+	// 	f := &fields[i]
+	// 	f.encoder = typeEncoder(typeByIndex(t, f.index))
+	// }
+	nameIndex := make(map[string]int, len(fields))
+	for i, field := range fields {
+		nameIndex[field.name] = i
+	}
+	return structFields{fields, nameIndex}
+}
+
+// dominantField looks through the fields, all of which are known to
+// have the same name, to find the single field that dominates the
+// others using Go's embedding rules, modified by the presence of
+// JSON tags. If there are multiple top-level fields, the boolean
+// will be false: This condition is an error in Go and we skip all
+// the fields.
+func dominantField(fields []field) (field, bool) {
+	// The fields are sorted in increasing index-length order, then by presence of tag.
+	// That means that the first field is the dominant one. We need only check
+	// for error cases: two fields at top level, either both tagged or neither tagged.
+	if len(fields) > 1 && len(fields[0].index) == len(fields[1].index) && fields[0].tag == fields[1].tag {
+		return field{}, false
+	}
+	return fields[0], true
+}
+
+var fieldCache sync.Map // map[reflect.Type]structFields
+
+// cachedTypeFields is like typeFields but uses a cache to avoid repeated work.
+func cachedTypeFields(t reflect.Type) structFields {
+	if f, ok := fieldCache.Load(t); ok {
+		return f.(structFields)
+	}
+	f, _ := fieldCache.LoadOrStore(t, typeFields(t))
+	return f.(structFields)
+}
+
+// indirect walks down v allocating pointers as needed,
+// until it gets to a non-pointer.
+// If it encounters an Unmarshaler, indirect stops and returns that.
+// If decodingNull is true, indirect stops at the first settable pointer so it
+// can be set to nil.
+func indirect(v reflect.Value, decodingNull bool) (json.Unmarshaler, encoding.TextUnmarshaler, reflect.Value) {
+	// Issue #24153 indicates that it is generally not a guaranteed property
+	// that you may round-trip a reflect.Value by calling Value.Addr().Elem()
+	// and expect the value to still be settable for values derived from
+	// unexported embedded struct fields.
+	//
+	// The logic below effectively does this when it first addresses the value
+	// (to satisfy possible pointer methods) and continues to dereference
+	// subsequent pointers as necessary.
+	//
+	// After the first round-trip, we set v back to the original value to
+	// preserve the original RW flags contained in reflect.Value.
+	v0 := v
+	haveAddr := false
+
+	// If v is a named type and is addressable,
+	// start with its address, so that if the type has pointer methods,
+	// we find them.
+	if v.Kind() != reflect.Ptr && v.Type().Name() != "" && v.CanAddr() {
+		haveAddr = true
+		v = v.Addr()
+	}
+	for {
+		// Load value from interface, but only if the result will be
+		// usefully addressable.
+		if v.Kind() == reflect.Interface && !v.IsNil() {
+			e := v.Elem()
+			if e.Kind() == reflect.Ptr && !e.IsNil() && (!decodingNull || e.Elem().Kind() == reflect.Ptr) {
+				haveAddr = false
+				v = e
+				continue
+			}
+		}
+
+		if v.Kind() != reflect.Ptr {
+			break
+		}
+
+		if decodingNull && v.CanSet() {
+			break
+		}
+
+		// Prevent infinite loop if v is an interface pointing to its own address:
+		//     var v interface{}
+		//     v = &v
+		if v.Elem().Kind() == reflect.Interface && v.Elem().Elem() == v {
+			v = v.Elem()
+			break
+		}
+		if v.IsNil() {
+			v.Set(reflect.New(v.Type().Elem()))
+		}
+		if v.Type().NumMethod() > 0 && v.CanInterface() {
+			if u, ok := v.Interface().(json.Unmarshaler); ok {
+				return u, nil, reflect.Value{}
+			}
+			if !decodingNull {
+				if u, ok := v.Interface().(encoding.TextUnmarshaler); ok {
+					return nil, u, reflect.Value{}
+				}
+			}
+		}
+
+		if haveAddr {
+			v = v0 // restore original value after round-trip Value.Addr().Elem()
+			haveAddr = false
+		} else {
+			v = v.Elem()
+		}
+	}
+	return nil, nil, v
+}
+
 type ODBCRecordset struct {
 	MetaDataWork
 	db   *sql.DB
@@ -5064,6 +5635,167 @@ func (t ODBCRecordset) ToJson() ([]byte, error) {
 	buf = []byte(str0)
 
 	return buf, err
+}
+
+func setValuesStruct(item reflect.Value, data RowAbstract) (err error) {
+
+	typeName := item.Type().String() //getTypeName(obj)
+
+	var fields structFields
+
+	t := item.Type()
+	fields = cachedTypeFields(t)
+
+	for key, value := range data {
+		field := item.FieldByName(key)
+		if !field.IsValid() {
+			nFld, ok := fields.nameIndex[key]
+			if !ok {
+				continue
+			}
+			field = item.FieldByIndex([]int{nFld})
+			if !field.IsValid() {
+				continue
+			}
+		}
+
+		if field.Type().String() != reflect.TypeOf(value).String() {
+			err = fmt.Errorf("cannot unmarshal %s into Go struct field %s.%s of type %s", reflect.TypeOf(value).String(), typeName, key, field.Type().String())
+			return
+		}
+
+		field.Set(reflect.ValueOf(value))
+	}
+
+	return
+}
+
+//func setValuesFromMapArray(obj interface{}, data []map[string]interface{}) {
+func setValuesFromMapArray(obj interface{}, data []RowAbstract) (err error) {
+
+	v := reflect.ValueOf(obj) //.Elem()
+	fmt.Println(v.Kind())
+
+	_, ut, pv := indirect(v, false)
+	// u, ut, pv := indirect(v, false)
+	// if u != nil {
+	// 	return u.UnmarshalJSON(d.data[start:d.off])
+	// }
+	if ut != nil {
+		e := json.UnmarshalTypeError{Value: "object", Type: v.Type(), Offset: 0}
+		if e.Struct != "" || e.Field != "" {
+			return fmt.Errorf("json: cannot unmarshal " + e.Value + " into Go struct field " + e.Struct + "." + e.Field + " of type " + e.Type.String())
+		}
+		return fmt.Errorf("json: cannot unmarshal " + e.Value + " into Go value of type " + e.Type.String())
+		//			 return nil
+	}
+	//	fmt.Println(u)
+	//	fmt.Println(ut)
+
+	v = pv
+	//	fmt.Println(v.Kind())
+	//typeName := v.Name()
+
+	ii := len(data)
+	if v.Kind() == reflect.Slice {
+		if ii >= v.Cap() {
+			newcap := v.Cap() + v.Cap()/2
+			if newcap < ii {
+				newcap = ii
+			}
+			if newcap < ii {
+				newcap = ii
+			}
+			newv := reflect.MakeSlice(v.Type(), v.Len(), newcap)
+			reflect.Copy(newv, v)
+			v.Set(newv)
+		}
+		if ii >= v.Len() {
+			v.SetLen(ii)
+		}
+	} else {
+		err = fmt.Errorf("Приёмник - не массив")
+		return
+	}
+
+	// var fields structFields
+
+	// switch v.Index(0).Kind() {
+	// case reflect.Struct:
+	// 	t := v.Index(0).Type()
+	// 	fields = cachedTypeFields(t)
+	// }
+	for i := 0; i < ii; i++ {
+		item := v.Index(i)
+
+		err = setValuesStruct(item, data[i])
+		//for key, value := range data[i] {
+
+		// field := item.FieldByName(key)
+		// if !field.IsValid() {
+		// 	nFld, ok := fields.nameIndex[key]
+		// 	if !ok {
+		// 		continue
+		// 	}
+		// 	field = item.FieldByIndex([]int{nFld})
+		// 	if !field.IsValid() {
+		// 		continue
+		// 	}
+		// }
+
+		// if field.Type().String() != reflect.TypeOf(value).String() {
+		// 	fmt.Printf("cannot unmarshal %s into Go struct field %s.%s of type %s", reflect.TypeOf(value).String(), typeName, key, field.Type().String())
+		// 	continue
+		// }
+
+		// field.Set(reflect.ValueOf(value))
+		//}
+	}
+	//	fmt.Println(fields)
+	return
+}
+
+//func (t ODBCRecordset) _UnMarshal(obj interface{}, data any) (err error) {
+func (t ODBCRecordset) _UnMarshal(data any) (err error) {
+	obj, err := t.GetRows()
+	if err != nil {
+		return
+	}
+
+	v := reflect.ValueOf(obj) //.Elem()
+	if v.Kind() != reflect.Pointer {
+		err = fmt.Errorf("_UnMarshal: Параметр д.б. указатель")
+		return
+	}
+	v = v.Elem()
+	if (v.Kind() == reflect.Array) || (v.Kind() == reflect.Slice) {
+		return setValuesFromMapArray(obj, data.([]RowAbstract))
+	} else if v.Kind() == reflect.Struct {
+		return setValuesStruct(v, data.([]RowAbstract)[0])
+	}
+
+	switch vv := data.(type) {
+	case []RowAbstract:
+		fmt.Println("vv=", vv)
+		p := vv[0]
+		for _, el := range p {
+			data = el
+			break
+		}
+	default:
+		fmt.Println("vv=", vv)
+	}
+
+	z := reflect.ValueOf(data)
+	//	if v.Type().String() != reflect.TypeOf(v).String() {
+	if v.Type().String() != z.Type().String() {
+		err = fmt.Errorf("cannot unmarshal into Go struct field %s of type %s", z.Type().String(), v.Type().String())
+		return
+	}
+
+	v.Set(reflect.ValueOf(data))
+
+	return
 }
 
 func (t ODBCRecordset) GetCols() []string {
