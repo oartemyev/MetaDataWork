@@ -5798,6 +5798,95 @@ func (t ODBCRecordset) _UnMarshal(data any) (err error) {
 	return
 }
 
+func (t ODBCRecordset) GetValue(obj interface{}, data any, f string) (err error) {
+
+	v := reflect.ValueOf(obj) //.Elem()
+	if v.Kind() != reflect.Pointer {
+		err = fmt.Errorf("GetValue: Параметр д.б. указатель")
+		return
+	}
+	v = v.Elem()
+	if (v.Kind() == reflect.Array) || (v.Kind() == reflect.Slice) {
+		err = fmt.Errorf("GetValue: Параметр д.б. не массиворм и не структурой")
+		return
+	} else if v.Kind() == reflect.Struct {
+		err = fmt.Errorf("GetValue: Параметр д.б. не массиворм и не структурой")
+		return
+	}
+
+	switch vv := data.(type) {
+	case []RowAbstract:
+		fmt.Println("vv=", vv)
+		p := vv[0]
+		found := false
+		for key, el := range p {
+			if key != f {
+				continue
+			}
+			data = el
+			found = true
+			break
+		}
+		if !found {
+			err = fmt.Errorf("GetValue: не найдено поле '%s'", f)
+			return
+		}
+	default:
+		err = fmt.Errorf("GetValue: Не верный тип данных источника")
+		return
+	}
+
+	z := reflect.ValueOf(data)
+	//	if v.Type().String() != reflect.TypeOf(v).String() {
+	if v.Type().String() != z.Type().String() {
+		err = fmt.Errorf("cannot unmarshal into Go struct field %s of type %s", z.Type().String(), v.Type().String())
+		return
+	}
+
+	v.Set(reflect.ValueOf(data))
+
+	return
+
+}
+
+func (t ODBCRecordset) UnMarshal(obj interface{}, data any) (err error) {
+
+	v := reflect.ValueOf(obj) //.Elem()
+	if v.Kind() != reflect.Pointer {
+		err = fmt.Errorf("_UnMarshal: Параметр д.б. указатель")
+		return
+	}
+	v = v.Elem()
+	if (v.Kind() == reflect.Array) || (v.Kind() == reflect.Slice) {
+		return setValuesFromMapArray(obj, data.([]RowAbstract))
+	} else if v.Kind() == reflect.Struct {
+		return setValuesStruct(v, data.([]RowAbstract)[0])
+	}
+
+	switch vv := data.(type) {
+	case []RowAbstract:
+		fmt.Println("vv=", vv)
+		p := vv[0]
+		for _, el := range p {
+			data = el
+			break
+		}
+	default:
+		fmt.Println("vv=", vv)
+	}
+
+	z := reflect.ValueOf(data)
+	//	if v.Type().String() != reflect.TypeOf(v).String() {
+	if v.Type().String() != z.Type().String() {
+		err = fmt.Errorf("cannot unmarshal into Go struct field %s of type %s", z.Type().String(), v.Type().String())
+		return
+	}
+
+	v.Set(reflect.ValueOf(data))
+
+	return
+}
+
 func (t ODBCRecordset) GetCols() []string {
 	return t.cols
 }
