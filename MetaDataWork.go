@@ -4049,34 +4049,37 @@ func (t *MetaDataWork) ParseQuery(v string) (string, error) {
 
 	var db *sql.DB
 	var err error
-	strConnection := t.GetConnectString()
-	db, err = sql.Open("sqlserver", strConnection)
-	if err != nil {
-		fmt.Printf("Error SliceLast_DBF_SQL %s", err.Error())
-		return "", err
+
+	if t.ConnectInfo.Server != "" {
+
+		strConnection := t.GetConnectString()
+		db, err = sql.Open("sqlserver", strConnection)
+		if err != nil {
+			fmt.Printf("Error SliceLast_DBF_SQL %s", err.Error())
+			return "", err
+		}
+
+		CreateFunctionStrToId(db)
+		CreateFunctionIntToTime(db)
+
+		db.Close()
+
+		t.CalculateBoundariesTA()
+		v = t.ParseLastValue(v)
+		t.FillTableOfSources(v)
+		v = t.ParsingDataSources(v)
+
+		v = t.ParsingTableAttributes(v)
+		//ПарсингВТРегистрОстатки
+		v = t.ParsingVTRegisterBalances(v)
+
+		//ПарсингВТСрезПоследних
+		v = t.ParsingVTSliceLatest(v)
+		//ПарсингВТСрезПервых
+		v = t.ParsingVTScutFirst(v)
+		//ПарсингВТИстория
+		v = t.ParsingVTIhistory(v)
 	}
-
-	CreateFunctionStrToId(db)
-	CreateFunctionIntToTime(db)
-
-	db.Close()
-
-	t.CalculateBoundariesTA()
-	v = t.ParseLastValue(v)
-	t.FillTableOfSources(v)
-	v = t.ParsingDataSources(v)
-
-	v = t.ParsingTableAttributes(v)
-	//ПарсингВТРегистрОстатки
-	v = t.ParsingVTRegisterBalances(v)
-
-	//ПарсингВТСрезПоследних
-	v = t.ParsingVTSliceLatest(v)
-	//ПарсингВТСрезПервых
-	v = t.ParsingVTScutFirst(v)
-	//ПарсингВТИстория
-	v = t.ParsingVTIhistory(v)
-
 	v = t.ParseParameters(v)
 	for i := range t.SubQuery {
 		v = t.SubQuery[i] + "\n" + v
