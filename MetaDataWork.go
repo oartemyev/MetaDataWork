@@ -5447,7 +5447,7 @@ type RowAbstract map[string]interface{}
 
 func (t ODBCRecordset) GetRows() ([]RowAbstract, error) {
 	//masterData := make(map[string][]interface{})
-	masterData := []RowAbstract{}
+	masterData := make([]RowAbstract, 0) //[]RowAbstract{}
 	var err error
 	cols, _ := t.rows.Columns()
 	lenCols := len(cols)
@@ -5486,7 +5486,7 @@ func (t ODBCRecordset) GetRows() ([]RowAbstract, error) {
 
 	return masterData, err
 }
-func (t ODBCRecordset) NextResultSet() bool {
+func (t *ODBCRecordset) NextResultSet() bool {
 
 	b := t.rows.NextResultSet()
 	if b {
@@ -5677,7 +5677,7 @@ func setValuesStruct(item reflect.Value, data RowAbstract) (err error) {
 func setValuesFromMapArray(obj interface{}, data []RowAbstract) (err error) {
 
 	v := reflect.ValueOf(obj) //.Elem()
-	fmt.Println(v.Kind())
+	//fmt.Println(v.Kind())
 
 	_, ut, pv := indirect(v, false)
 	// u, ut, pv := indirect(v, false)
@@ -5759,8 +5759,8 @@ func setValuesFromMapArray(obj interface{}, data []RowAbstract) (err error) {
 }
 
 //func (t ODBCRecordset) _UnMarshal(obj interface{}, data any) (err error) {
-func (t ODBCRecordset) _UnMarshal(data any) (err error) {
-	obj, err := t.GetRows()
+func (t *ODBCRecordset) UnMarshalNew(obj any) (err error) {
+	data, err := t.GetRows()
 	if err != nil {
 		return
 	}
@@ -5772,24 +5772,25 @@ func (t ODBCRecordset) _UnMarshal(data any) (err error) {
 	}
 	v = v.Elem()
 	if (v.Kind() == reflect.Array) || (v.Kind() == reflect.Slice) {
-		return setValuesFromMapArray(obj, data.([]RowAbstract))
+		return setValuesFromMapArray(obj, data)
 	} else if v.Kind() == reflect.Struct {
-		return setValuesStruct(v, data.([]RowAbstract)[0])
+		return setValuesStruct(v, data[0])
 	}
 
-	switch vv := data.(type) {
-	case []RowAbstract:
-		fmt.Println("vv=", vv)
-		p := vv[0]
-		for _, el := range p {
-			data = el
-			break
-		}
-	default:
-		fmt.Println("vv=", vv)
+	//switch vv := data.(type) {
+	//case []RowAbstract:
+	//fmt.Println("vv=", vv)
+	var dat any
+	p := data[0]
+	for _, el := range p {
+		dat = el
+		break
 	}
+	//default:
+	//	fmt.Println("vv=", vv)
+	//}
 
-	z := reflect.ValueOf(data)
+	z := reflect.ValueOf(dat)
 	//	if v.Type().String() != reflect.TypeOf(v).String() {
 	if v.Type().String() != z.Type().String() {
 		err = fmt.Errorf("cannot unmarshal into Go struct field %s of type %s", z.Type().String(), v.Type().String())
@@ -5868,7 +5869,7 @@ func (t ODBCRecordset) UnMarshal(obj interface{}, data any) (err error) {
 
 	switch vv := data.(type) {
 	case []RowAbstract:
-		fmt.Println("vv=", vv)
+		//fmt.Println("vv=", vv)
 		p := vv[0]
 		for _, el := range p {
 			data = el
