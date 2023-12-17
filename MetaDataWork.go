@@ -5758,7 +5758,7 @@ func setValuesFromMapArray(obj interface{}, data []RowAbstract) (err error) {
 	return
 }
 
-//
+//--
 //func (t ODBCRecordset) _UnMarshal(obj interface{}, data any) (err error) {
 func (t *ODBCRecordset) UnMarshalNew(obj any) (err error) {
 	data, err := t.GetRows()
