@@ -1,4 +1,4 @@
-//#
+// #
 package MetaDataWork
 
 import (
@@ -39,10 +39,9 @@ import (
 	"github.com/richardlehane/mscfb"
 )
 
-//=======================  НАЧАЛО КЛАССА Storage ===========================================
+// =======================  НАЧАЛО КЛАССА Storage ===========================================
 //
-//DirectoryEntryTypes
-//
+// DirectoryEntryTypes
 const (
 	UNKNOWN      = 0
 	STORAGE      = 1
@@ -50,13 +49,15 @@ const (
 	ROOT_STORAGE = 5
 )
 
-//SectorNumbers
+// SectorNumbers
 // const uint32 (
-// 	FREESECT     = -1
-// 	END_OF_CHAIN = -2
-// 	FATSECT      = -3
-// 	DIFSECT      = -2
-// 	MAX_SEC_NUM  = -6
+//
+//	FREESECT     = -1
+//	END_OF_CHAIN = -2
+//	FATSECT      = -3
+//	DIFSECT      = -2
+//	MAX_SEC_NUM  = -6
+//
 // )
 var FREESECT uint32 = 4294967295     // 0xFFFFFFFF
 var END_OF_CHAIN uint32 = 4294967294 // 0xFFFFFFFE
@@ -80,8 +81,28 @@ type DirectoryEntry struct {
 	stream_size                                 int64
 }
 
-//var minor_version, major_version int16
-//var bom, sector_shift_exp, mini_sector_shift_exp int16
+type ShortDate struct {
+	time.Time
+}
+
+const layout = "2006-01-02 15:04:05"
+const layoutShortDate = "2006-01-02"
+
+func (c *ShortDate) UnmarshalJSON(b []byte) (err error) {
+	s := strings.Trim(string(b), `"`) // remove quotes
+	if s == "null" {
+		return
+	}
+	c.Time, err = time.Parse(layoutShortDate, s)
+	return
+}
+
+func (c ShortDate) GetTime() time.Time {
+	return c.Time
+}
+
+// var minor_version, major_version int16
+// var bom, sector_shift_exp, mini_sector_shift_exp int16
 var sector_size, mini_sector_size int16
 var binary_data []byte
 
@@ -94,7 +115,7 @@ var DIFAT []int32
 var FAT []int32
 var FAT_sectors []int32
 
-//var miniFAT []int32
+// var miniFAT []int32
 var max_sector_index uint32
 
 //var directory_entries []DirectoryEntry
@@ -153,9 +174,9 @@ func DirectoryEntryTypes(i int) string {
 	return "ERROR ENTRY TYPE " + IntToString(i)
 }
 
-// func is_valid(sec_num int32) bool {
-// 	return uint32(sec_num) < MAX_SEC_NUM
-// }
+//	func is_valid(sec_num int32) bool {
+//		return uint32(sec_num) < MAX_SEC_NUM
+//	}
 func DecodeUTF16(b []byte) string {
 	utf := make([]uint16, (len(b)+(2-1))/2)
 	o := binary.BigEndian //binary.LittleEndian
@@ -675,7 +696,7 @@ func (t *Stream) Read(c []byte, lSize int32) []byte {
 
 //=======================  КОНЕЦ КЛАССА Storage ===========================================
 
-//=======================  НАЧАЛО MetaDataWork ===========================================
+// =======================  НАЧАЛО MetaDataWork ===========================================
 type TTokenType int
 
 const (
@@ -1095,12 +1116,12 @@ type DocSelRefObj struct {
 }
 
 /*
-func (t *DocSelRefObj) GetType() string {
-	s := ""
-	fmt.Sprintf(s, "%T", t)
+	func (t *DocSelRefObj) GetType() string {
+		s := ""
+		fmt.Sprintf(s, "%T", t)
 
-	return s
-}
+		return s
+	}
 */
 func (t *DocSelRefObj) _Dummy() {}
 
@@ -1151,12 +1172,12 @@ func IntToString(i int) string {
 }
 
 /*
-func (t *FormMD) GetType() string {
-	s := ""
-	fmt.Sprintf(s, "%T", t)
+	func (t *FormMD) GetType() string {
+		s := ""
+		fmt.Sprintf(s, "%T", t)
 
-	return s
-}
+		return s
+	}
 */
 func (t *FormMD) _Dummy() {}
 
@@ -1190,12 +1211,12 @@ type CommonProp struct {
 }
 
 /*
-func (t *CommonProp) GetType() string {
-	s := ""
-	fmt.Sprintf(s,"%T", t)
+	func (t *CommonProp) GetType() string {
+		s := ""
+		fmt.Sprintf(s,"%T", t)
 
-	return s
-}
+		return s
+	}
 */
 func (t *CommonProp) _Dummy() {}
 
@@ -2401,7 +2422,7 @@ func (t MetaDataWork) SelectVariable(v string) string {
 	return v
 }
 
-//func (t MetaDataWork) LongToCharID36(ID int64, val string, Len int) string {
+// func (t MetaDataWork) LongToCharID36(ID int64, val string, Len int) string {
 func (t MetaDataWork) LongToCharID36(ID int64, Len int) string {
 
 	Buffer := ""
@@ -3035,7 +3056,7 @@ func (t MetaDataWork) GetEndOfPeriod(Date time.Time) time.Time {
 	return dt
 }
 
-//ПодготовитьУсловиеПоРегистрам
+// ПодготовитьУсловиеПоРегистрам
 func (t MetaDataWork) PrepareConditionRegistr(condition string, RegistID string, nameTable string) string {
 	if condition[len(condition)-1] == ',' {
 		condition = condition[:len(condition)-1]
@@ -3072,7 +3093,7 @@ func (t MetaDataWork) PrepareConditionRegistr(condition string, RegistID string,
 	return txtQuery
 }
 
-//Остатки_РегистрОстатки_SQL
+// Остатки_РегистрОстатки_SQL
 func (t MetaDataWork) RegistrRests(res []string) string {
 	txtQuery := ""
 	RegistID := res[1]
@@ -3289,7 +3310,7 @@ func (t MetaDataWork) RegistrRests(res []string) string {
 	return "(\n" + txtQuery + "\n)"
 }
 
-//ПарсингВТРегистрОстатки
+// ПарсингВТРегистрОстатки
 func (t MetaDataWork) ParsingVTRegisterBalances(v string) string {
 	Param := t.GetStringParam(5)
 	Pattern := `\$РегистрОстатки\.([\wа-яё]+[^\wа-яё\(]*)\(` + Param
@@ -3321,7 +3342,7 @@ func PrepareString(s string) string {
 	return strings.Trim(s, " ")
 }
 
-//ПодготовитьУсловиеПоСрезПервыхПоследних
+// ПодготовитьУсловиеПоСрезПервыхПоследних
 func (t *MetaDataWork) PrepareConditionBySliceFirstLast(strCondotion string, NameTable string) string {
 	txtQuery := PrepareString(strCondotion)
 	Pattern := `'[^']*'|\$?[\wа-я]+\.[\wа-я]+|[:@\$]?[\wа-я]+|[^:@\$\wа-я']+`
@@ -3414,7 +3435,7 @@ func CreateFunctionStrToId(db *sql.DB) error {
 	return nil
 }
 
-//СрезПоследних_DBF_SQL
+// СрезПоследних_DBF_SQL
 func (t *MetaDataWork) SliceLast_DBF_SQL(res []string) string {
 	txtQuery := ""
 
@@ -3632,7 +3653,7 @@ func (t *MetaDataWork) SliceLast_DBF_SQL(res []string) string {
 	return txtQuery
 }
 
-//СрезПервых_DBF_SQL
+// СрезПервых_DBF_SQL
 func (t *MetaDataWork) SliceFirst_DBF_SQL(res []string) string {
 	txtQuery := ""
 
@@ -3849,7 +3870,7 @@ func (t *MetaDataWork) SliceFirst_DBF_SQL(res []string) string {
 	return txtQuery
 }
 
-//История_DBF_SQL
+// История_DBF_SQL
 func (t *MetaDataWork) History_DBF_SQL(res []string) string {
 	txtQuery := ""
 
@@ -3985,7 +4006,7 @@ func (t *MetaDataWork) History_DBF_SQL(res []string) string {
 	return txtQuery
 }
 
-//ПарсингВТСрезПоследних
+// ПарсингВТСрезПоследних
 func (t *MetaDataWork) ParsingVTSliceLatest(v string) string {
 	Param := t.GetStringParam(5)
 	Pattern := `\$СрезПоследних\.([\wа-яё]+[^\wа-яё\(]*)\(` + Param
@@ -4005,7 +4026,7 @@ func (t *MetaDataWork) ParsingVTSliceLatest(v string) string {
 
 }
 
-//ПарсингВТСрезПервых
+// ПарсингВТСрезПервых
 func (t *MetaDataWork) ParsingVTScutFirst(v string) string {
 	Param := t.GetStringParam(5)
 	Pattern := `\$СрезПервых\.([\wа-яё]+[^\wа-яё\(]*)\(` + Param
@@ -4025,7 +4046,7 @@ func (t *MetaDataWork) ParsingVTScutFirst(v string) string {
 
 }
 
-//ПарсингВТИстория
+// ПарсингВТИстория
 func (t *MetaDataWork) ParsingVTIhistory(v string) string {
 	Param := t.GetStringParam(5)
 	Pattern := `\$История\.([\wа-яё]+[^\wа-яё\(]*)\(` + Param
@@ -4718,8 +4739,9 @@ func getTypeName(ptr interface{}) string {
 // 4) simpleLetterEqualFold, no specials, no non-letters.
 //
 // The letters S and K are special because they map to 3 runes, not just 2:
-//  * S maps to s and to U+017F 'Еї' Latin small letter long s
-//  * k maps to K and to U+212A 'в„Є' Kelvin sign
+//   - S maps to s and to U+017F 'Еї' Latin small letter long s
+//   - k maps to K and to U+212A 'в„Є' Kelvin sign
+//
 // See https://play.golang.org/p/tTxjOc0OGo
 //
 // The returned function is specialized for matching against s and
@@ -5662,6 +5684,14 @@ func setValuesStruct(item reflect.Value, data RowAbstract) (err error) {
 			}
 		}
 
+		//fmt.Printf("%s  %s\n", reflect.TypeOf(value).String(), field.Type().String())
+
+		if reflect.TypeOf(value).String() == "time.Time" && field.Type().String() == "MetaDataWork.ShortDate" {
+			var tt ShortDate
+			tt.Time = value.(time.Time) //.In(GetLocation())
+			field.Set(reflect.ValueOf(tt))
+			continue
+		}
 		if field.Type().String() != reflect.TypeOf(value).String() {
 			err = fmt.Errorf("cannot unmarshal %s into Go struct field %s.%s of type %s", reflect.TypeOf(value).String(), typeName, key, field.Type().String())
 			return
@@ -5673,7 +5703,7 @@ func setValuesStruct(item reflect.Value, data RowAbstract) (err error) {
 	return
 }
 
-//func setValuesFromMapArray(obj interface{}, data []map[string]interface{}) {
+// func setValuesFromMapArray(obj interface{}, data []map[string]interface{}) {
 func setValuesFromMapArray(obj interface{}, data []RowAbstract) (err error) {
 
 	v := reflect.ValueOf(obj) //.Elem()
@@ -5758,8 +5788,8 @@ func setValuesFromMapArray(obj interface{}, data []RowAbstract) (err error) {
 	return
 }
 
-//--
-//func (t ODBCRecordset) _UnMarshal(obj interface{}, data any) (err error) {
+// --
+// func (t ODBCRecordset) _UnMarshal(obj interface{}, data any) (err error) {
 func (t *ODBCRecordset) UnMarshalNew(obj any) (err error) {
 	data, err := t.GetRows()
 	if err != nil {
@@ -5821,7 +5851,7 @@ func (t ODBCRecordset) GetValue(obj interface{}, data any, f string) (err error)
 
 	switch vv := data.(type) {
 	case []RowAbstract:
-		fmt.Println("vv=", vv)
+		//fmt.Println("vv=", vv)
 		p := vv[0]
 		found := false
 		for key, el := range p {
