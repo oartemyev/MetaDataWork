@@ -93,8 +93,23 @@ func (c *ShortDate) UnmarshalJSON(b []byte) (err error) {
 	if s == "null" {
 		return
 	}
-	c.Time, err = time.Parse(layoutShortDate, s)
+	arr := strings.Split(s, " ")
+	c.Time, err = time.Parse(layoutShortDate, arr[0])
 	return
+}
+
+func (c ShortDate) MarshalJSON() ([]byte, error) {
+	//if c.Time.IsZero() || (c.Time.Year() == 2000 && c.Time.Day() == 1 && c.Time.Month() == 0 && c.Time.Hour() == 0) {
+	// if c.Time.IsZero() || (c.Time.Year() == 1 && c.Time.Day() == 1) {
+	// 	fmt.Println(c.Time.Year(), c.Time.Month(), c.Time.Day(), c.Time.Hour(), c.Time.Minute(), c.Time.Second())
+	// 	//var t time.Time `json:"t,omitempty"`
+	// 	//return json.Marshal(t)
+	// 	return []byte{}, nil
+	// }
+	if c.Time.IsZero() {
+		return []byte("null"), nil
+	}
+	return []byte(fmt.Sprintf(`"%s"`, c.Time.Format(layoutShortDate))), nil
 }
 
 func (c ShortDate) GetTime() time.Time {
